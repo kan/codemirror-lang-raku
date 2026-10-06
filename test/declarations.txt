@@ -77,7 +77,7 @@ Program(
   multi, RoutineDeclaration(RoutineName, Parens(VariableName, VariableName), Block),
   multi, RoutineDeclaration(sub, RoutineName, Parens, Block),
   multi, RoutineDeclaration(method, RoutineName, Parens, Block),
-  proto, RegexDeclaration(token, RegexName, Block(Regex)))
+  proto, RegexDeclaration(token, RegexName, Block(Regex(Operator))))
 
 # Words like multi that do not declare
 

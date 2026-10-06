@@ -93,7 +93,7 @@ on incomplete code.
 | `VariableName`, `AttributeName`, `SpecialVariable` | `$x` / `$^a`, `$!x` / `$.x`, `$*x` / `$?x` |
 | `StringLiteral` | A quote of any kind. One that interpolates has `Escape`, `Interpolation`, variable, `Brackets`, `Parens` and `MethodCall` children |
 | `Heredoc` | The text of a heredoc, from the line after its `q:to/END/` opener through its terminator. The opener is a `StringLiteral` |
-| `Regex` | `/…/`, `rx//`, `m//`, `s///`, `tr///`, or the body of a regex declaration |
+| `Regex` | `/…/`, `rx//`, `m//`, `s///`, `tr///`, or the body of a regex declaration. In a declaration, its children are `CharacterClass` (`<[a..z]>`), `Assertion` (`<name>`, `<?before …>`), `StringLiteral`, `Escape` (`\d`), `Operator` (quantifiers, `\|`, anchors), `VariableName` (`$x`, `$<name>`), `LineComment`, and a `Block` for each `{ }` of code |
 | `LineComment`, `DocComment`, `BlockComment` | `#`, `#|` / `#=`, `` #`( ) `` |
 | `Pod` | `=begin` … `=end` and the other Pod blocks. Its children are `PodDirective` (`=begin`, `=head1`, `=end pod`), `PodHeading` (the text after `=head1`), and the formatting codes `PodStrong` (`B<…>`), `PodEmphasis` (`I<…>`), `PodCode` (`C<…>`), `PodLink` (`L<…>`) and `PodFormat` (the others) |
 
@@ -107,9 +107,13 @@ declarator keyword.
 
 Not supported yet:
 
-- Nothing is highlighted inside a regex. A regex literal, and the body of
-  a `token` / `rule` / `regex` declaration, is a single `Regex` token,
-  including any code blocks in it.
+- Nothing is highlighted inside a regex literal (`/…/`, `rx//`, `m//`,
+  `s///`): it is a single `Regex` token, including any code in it.
+- In the body of a `token` / `rule` / `regex` declaration, a `<…>` is one
+  token, with the code or the nested `<…>` in it, and has to be closed on
+  its line unless it is a character class. Groups (`[ ]`, `( )`) and
+  adverbs (`:i`, `:my`) are plain text, so the text after `:my` is read
+  as regex.
 - Nothing is highlighted inside a heredoc: there is no interpolation in
   a `qq:to` heredoc.
 - In Pod, a formatting code is one token: the codes inside it

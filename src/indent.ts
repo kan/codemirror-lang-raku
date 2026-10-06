@@ -74,6 +74,12 @@ function holdsPairs(block: SyntaxNode, state: EditorState) {
 // Whether a line continues a statement of `bracket`. The line starts at
 // `pos` with the text `after`.
 function continuesStatement(state: EditorState, bracket: SyntaxNode, pos: number, after: string) {
+  // The lines of a regex are not statements: its `+` and `|` are not
+  // the operators of an expression.
+  for (let node: SyntaxNode | null = bracket.resolveInner(pos, -1); node && node.from >= bracket.from; node = node.parent) {
+    if (node.name == "Regex") return false
+    if (brackets.test(node.name)) break
+  }
   let before = tokenBefore(bracket, pos)
   if (!before || bracketOf(before) != bracket) return false
   let name = before.name, text = state.sliceDoc(before.from, before.to)

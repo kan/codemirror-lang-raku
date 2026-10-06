@@ -10,7 +10,8 @@ import {
   PackageName, RoutineName, methodRoutineName, RegexName, EnumName, SubsetName, ConstantName,
   methodDot, declaredName, declaredMethodName, smiley, plainName, multiName, multiRoutineName, wordOperator,
   rawString, quoteStart, quoteContent, quoteNestOpen, quoteNestClose, quoteEnd,
-  regexBody
+  regexBody, regexStart, regexBodyEnd, regexText, CharacterClass, Assertion, regexQuote, regexOperator, regexComment,
+  regexBlockComment, regexCapture
 } from "./syntax.grammar.terms"
 
 const enum Ch {
@@ -205,6 +206,18 @@ const enum PodKind {
   Finish,
 }
 
+// The body of a regex declaration that is being read piece by piece.
+class RegexBody {
+  hash: number
+  constructor(// The body around the block of code that this one is in.
+              readonly parent: RegexBody | null,
+              // How many braces are open in a block of code in the
+              // regex. Zero in the regex itself.
+              readonly braces: number) {
+    this.hash = ((parent ? parent.hash * 31 : 0) + 7919 * (braces + 1)) | 0
+  }
+}
+
 // A Pod block that is being read piece by piece.
 class PodBlock {
   hash: number
@@ -230,9 +243,11 @@ class Context {
               // current line, whose text starts on the next one.
               readonly heredocs: readonly string[],
               readonly pod: PodBlock | null,
+              // The body of a regex declaration that this is in.
+              readonly regex: RegexBody | null,
               hash = -1) {
     if (hash < 0) {
-      hash = (quote ? quote.hash : 0) ^ (pod ? pod.hash : 0)
+      hash = (quote ? quote.hash : 0) ^ (pod ? pod.hash : 0) ^ (regex ? regex.hash : 0)
       for (let terminator of heredocs) {
         hash = (hash * 31 + 17) | 0
         for (let i = 0; i < terminator.length; i++) hash = (hash * 31 + terminator.charCodeAt(i)) | 0
@@ -243,15 +258,18 @@ class Context {
     this.hash = hash
   }
   withMode(mode: Mode) {
-    return mode == this.mode ? this : new Context(mode, this.quote, this.heredocs, this.pod, this.hash)
+    return mode == this.mode ? this : new Context(mode, this.quote, this.heredocs, this.pod, this.regex, this.hash)
   }
   withHeredocs(heredocs: readonly string[]) {
-    return heredocs == this.heredocs ? this : new Context(this.mode, this.quote, heredocs, this.pod)
+    return heredocs == this.heredocs ? this : new Context(this.mode, this.quote, heredocs, this.pod, this.regex)
   }
   withQuote(mode: Mode, quote: Quote | null, heredocs = this.heredocs) {
-    return new Context(mode, quote, heredocs, this.pod)
+    return new Context(mode, quote, heredocs, this.pod, this.regex)
   }
-  withPod(pod: PodBlock | null) { return new Context(this.mode, this.quote, this.heredocs, pod) }
+  withPod(pod: PodBlock | null) { return new Context(this.mode, this.quote, this.heredocs, pod, this.regex) }
+  withRegex(regex: RegexBody | null) {
+    return new Context(this.mode, this.quote, this.heredocs, this.pod, regex)
+  }
 }
 
 // The mode after a token or a node, for those where the term settles
@@ -259,7 +277,11 @@ class Context {
 // agree.
 const termModes = new Map<number, Mode>()
 for (let term of [VariableName, AttributeName, SpecialVariable, operatorVariable, NumberTerm, radixNumber, Version, MethodName,
-                  PairKey, rawString, quoteEnd, StringLiteral, Regex, regexBody, self, True, False, Nil])
+                  PairKey, rawString, quoteEnd, StringLiteral, Regex, regexBody, self, True, False, Nil,
+                  // The pieces of a regex. What follows them is more of
+                  // the regex, or the brace that closes it.
+                  regexText, CharacterClass, Assertion, regexQuote, regexOperator, regexComment,
+                  regexBlockComment, regexCapture])
   termModes.set(term, Mode.AfterTerm)
 for (let term of [Identifier, TypeName, smiley, declaredName, declaredMethodName, PackageName, RoutineName,
                   methodRoutineName, multiName, multiRoutineName, RegexName, EnumName, SubsetName, ConstantName])
@@ -392,12 +414,22 @@ function lastToken(node: SyntaxNode): SyntaxNode | null {
 }
 
 export const trackContext = new ContextTracker<Context>({
-  start: new Context(Mode.Term, null, noHeredocs, null),
+  start: new Context(Mode.Term, null, noHeredocs, null, null),
   shift(context, term, _stack, input) {
     if (term == Heredoc) return context.withHeredocs(noHeredocs)
     if (term == podStart) return context.withPod(readPodStart(input))
     if (term == podEnd || term == podEndDirective) return context.withPod(null)
     if (skippedTerms.has(term)) return context
+    let {regex} = context
+    if (term == regexStart) return context.withRegex(new RegexBody(regex, 0))
+    if (term == regexBodyEnd) return context.withRegex(regex && regex.parent).withMode(termModes.get(regexBody)!)
+    // The braces of a block of code in a regex, and of the blocks in it.
+    // The tokens `{` and `}` have no term to go by.
+    if (regex && !termModes.has(term)) {
+      if (input.next == Ch.BraceOpen) context = context.withRegex(new RegexBody(regex.parent, regex.braces + 1))
+      else if (input.next == Ch.BraceClose && regex.braces > 0)
+        context = context.withRegex(new RegexBody(regex.parent, regex.braces - 1))
+    }
     switch (term) {
       case quoteStart: {
         let opening = wordListOpening(input, 0) || readOpening(input)
@@ -1080,55 +1112,166 @@ export const heredocToken = new ExternalTokenizer((input, stack) => {
   input.acceptToken(Heredoc)
 })
 
-// The body of a token, rule or regex declaration, up to its closing brace.
-export const regexBodyToken = new ExternalTokenizer((input, stack) => {
-  if (!stack.canShift(regexBody)) return
-  let end = regexEnd(input, 0, Ch.BraceOpen, Ch.BraceClose, 1)
-  // A body does not hold another regex declaration. When one starts on
-  // a line before the closing brace that was found, that brace belongs
-  // to something further out, and this body was not closed.
-  let next = nextRegexDeclaration(input, end)
-  if (next >= 0) {
-    if (next > 0) input.acceptToken(regexBody, next)
-  } else if (end < 0) {
-    // Not closed: the rest of the input.
-    skipToEnd(input)
-    if (input.pos > stack.pos) input.acceptToken(regexBody)
-  } else if (end > 0) {
-    input.acceptToken(regexBody, end)
-  }
-})
-
 const regexDeclarator = /^(token|rule|regex)$/
 const regexDeclaratorPrefix = /^(proto|multi|my|our)$/
 
-// The offset of the end of the line before the first line that starts
-// a regex declaration, before offset `to`, or -1. A negative `to`
-// stands for the end of the input. Such a line holds a declarator, a
-// name, and further on a brace: `token name {`. In a regex, the words
-// alone can be literals: `token | rule`
-function nextRegexDeclaration(input: InputStream, to: number) {
-  for (let pos = 0; to < 0 || pos < to; pos++) {
+// Whether the line that starts at offset `pos` starts a regex
+// declaration: a declarator, a name, and further on a brace, as in
+// `token name {`. In a regex, the words alone can be literals:
+// `token | rule`
+function startsRegexDeclaration(input: InputStream, pos: number) {
+  let start = blanksEnd(input, pos), end = nameEnd(input, start)
+  // proto token, my regex
+  if (end > 0 && isBlank(input.peek(end)) && regexDeclaratorPrefix.test(word(input, start, end))) {
+    start = blanksEnd(input, end)
+    end = nameEnd(input, start)
+  }
+  if (end < 0 || end - start > 5 || !isBlank(input.peek(end)) || !regexDeclarator.test(word(input, start, end)))
+    return false
+  let name = blanksEnd(input, end), after = nameEnd(input, name)
+  if (after < 0) return false
+  for (after = categoryEnd(input, name, after);; after++) {
+    let next = input.peek(after)
+    if (next == Ch.BraceOpen) return true
+    if (next < 0 || next == Ch.Newline) return false
+  }
+}
+
+// The characters that quantify, combine and anchor in a regex.
+function isRegexOperator(ch: number) {
+  return ch == Ch.Plus || ch == Ch.Star || ch == Ch.Question || ch == Ch.Pipe || ch == Ch.Amp || ch == Ch.Caret ||
+    ch == Ch.Tilde || ch == Ch.Percent
+}
+
+// The offset after the `<...>` at the current position in a regex.
+// When it is not closed on its line, this is the negated offset of the
+// end of the text that was gone over to find that out.
+function assertionEnd(input: InputStream) {
+  for (let pos = 1, depth = 1;;) {
     let ch = input.peek(pos)
-    if (ch < 0) return -1
-    if (ch != Ch.Newline) continue
-    let start = blanksEnd(input, pos + 1), end = nameEnd(input, start)
-    // proto token, my regex
-    if (end > 0 && isBlank(input.peek(end)) && regexDeclaratorPrefix.test(word(input, start, end))) {
-      start = blanksEnd(input, end)
-      end = nameEnd(input, start)
-    }
-    if (end < 0 || !isBlank(input.peek(end)) || !regexDeclarator.test(word(input, start, end))) continue
-    let name = blanksEnd(input, end), after = nameEnd(input, name)
-    if (after < 0) continue
-    for (after = categoryEnd(input, name, after);; after++) {
-      let next = input.peek(after)
-      if (next == Ch.BraceOpen) return pos
-      if (next < 0 || next == Ch.Newline) break
+    if (ch < 0 || ch == Ch.Newline) return -pos
+    if (ch == Ch.Backslash) {
+      pos += input.peek(pos + 1) == Ch.Newline || input.peek(pos + 1) < 0 ? 1 : 2
+    } else if (ch == Ch.Apostrophe || ch == Ch.DoubleQuote) {
+      let end = quotedEnd(input, pos)
+      pos = end < 0 ? pos + 1 : end
+    } else if (ch == Ch.BracketOpen) {
+      // The brackets of a character class can hold a `>` and a `}`,
+      // and can span lines.
+      let end = pos + 1
+      while (input.peek(end) != Ch.BracketClose && input.peek(end) >= 0)
+        end += input.peek(end) == Ch.Backslash ? 2 : 1
+      pos = input.peek(end) == Ch.BracketClose ? end + 1 : pos + 1
+    } else if (ch == Ch.BraceOpen) {
+      // So can a block of code: <?{ $x > 1 }>
+      let end = pos + 1
+      for (let braces = 1; braces > 0; end++) {
+        let inner = input.peek(end)
+        if (inner < 0 || inner == Ch.Newline) return -pos
+        if (inner == Ch.BraceOpen) braces++
+        else if (inner == Ch.BraceClose) braces--
+      }
+      pos = end
+    } else if (ch == Ch.Less) {
+      depth++
+      pos++
+    } else if (ch == Ch.Greater) {
+      pos++
+      if (--depth == 0) return pos
+    } else {
+      pos++
     }
   }
-  return -1
 }
+
+// The pieces of the body of a token, rule or regex declaration. The
+// context tells whether the position is in such a body, and whether it
+// is in a block of code there, which is left to the other tokenizers.
+export const regexToken = new ExternalTokenizer((input, stack) => {
+  let {regex} = context(stack), next = input.next
+  if (!regex || regex.braces > 0) {
+    // Outside of a regex, or in a block of code in one, where another
+    // regex can be declared. An empty body, `{}`, has no regex.
+    if (next >= 0 && next != Ch.BraceClose && stack.canShift(regexStart)) input.acceptToken(regexStart)
+    return
+  }
+  // The body ends at its closing brace. One that is not closed ends
+  // before the next regex declaration, which a body does not hold, so
+  // that the declarations after it are still found.
+  if (next < 0 || next == Ch.BraceClose || next == Ch.Newline && startsRegexDeclaration(input, 1))
+    return input.acceptToken(regexBodyEnd)
+  // A block of code, and an escape, are tokens of the grammar. An
+  // escape does not take a line break, where the check above is made.
+  if (next == Ch.BraceOpen) return
+  if (next == Ch.Backslash && input.peek(1) >= 0 && input.peek(1) != Ch.Newline) return
+  if (next == Ch.Hash) {
+    // An embedded comment, #`( ... ), or one that runs to the end of the line.
+    let open = input.peek(2), close = input.peek(1) == Ch.Backtick ? brackets[open] : null
+    if (close != null) {
+      let count = 1
+      while (input.peek(2 + count) == open) count++
+      let end = rawEnd(input, 2 + count, {open, close, count, escapes: false})
+      if (end > 0) return input.acceptToken(regexBlockComment, end)
+    }
+    skipLine(input)
+    return input.acceptToken(regexComment)
+  }
+  if (next == Ch.Apostrophe || next == Ch.DoubleQuote) {
+    let end = quotedEnd(input, 0)
+    if (end > 0) return input.acceptToken(regexQuote, end)
+  } else if (next == Ch.Less || next == Ch.Greater || next == Ch.GuillemetOpen || next == Ch.GuillemetClose ||
+             next == Ch.ParenClose && input.peek(1) == Ch.Greater) {
+    // Word boundaries and capture markers stand alone: << >> « » <( )>
+    let after = input.peek(1)
+    if (next != Ch.Less || after == Ch.Less || after == Ch.ParenOpen) {
+      let size = next == Ch.GuillemetOpen || next == Ch.GuillemetClose ? 1 : 2
+      if (next != Ch.Greater || after == Ch.Greater) return input.acceptToken(regexOperator, size)
+    } else {
+      let end = assertionEnd(input)
+      if (end > 0) {
+        // <[a..z]>, <-[a]>, <+alpha-[b]>, <?[c]>
+        let kind = after == Ch.Question || after == Ch.Bang ? input.peek(2) : after
+        let isClass = kind == Ch.BracketOpen || kind == Ch.Hyphen || kind == Ch.Plus
+        return input.acceptToken(isClass ? CharacterClass : Assertion, end)
+      }
+      // What is not closed is text, up to the brace that closes the
+      // body if there is one on the line.
+      let stop = 1
+      while (stop < -end && input.peek(stop) != Ch.BraceClose) stop++
+      return input.acceptToken(regexText, stop)
+    }
+  } else if (next == Ch.Dollar || next == Ch.At) {
+    let after = input.peek(1)
+    // A named capture: $<name>
+    if (next == Ch.Dollar && after == Ch.Less) {
+      let end = nameEnd(input, 2)
+      if (end > 0 && input.peek(end) == Ch.Greater) return input.acceptToken(regexCapture, end + 1)
+    }
+    // A variable is a token of the grammar: $x, $0, $/, @list, $!attr, $*dynamic
+    if (isIdentifierStart(after) || next == Ch.Dollar && (isDigit(after) || after == Ch.Slash)) return
+    if ((after == Ch.Bang || after == Ch.Dot || after == Ch.Star || after == Ch.Question) &&
+        isIdentifierStart(input.peek(2))) return
+    // Otherwise `$` and `$$` anchor.
+    if (next == Ch.Dollar) {
+      while (input.next == Ch.Dollar) input.advance()
+      return input.acceptToken(regexOperator)
+    }
+  } else if (isRegexOperator(next)) {
+    while (isRegexOperator(input.next)) input.advance()
+    return input.acceptToken(regexOperator)
+  }
+  // Text, up to where one of the above may apply.
+  for (;;) {
+    input.advance()
+    let ch = input.next
+    if (ch < 0 || ch == Ch.Newline || ch == Ch.Backslash || ch == Ch.Apostrophe || ch == Ch.DoubleQuote ||
+        ch == Ch.Less || ch == Ch.Greater || ch == Ch.GuillemetOpen || ch == Ch.GuillemetClose ||
+        ch == Ch.ParenClose && input.peek(1) == Ch.Greater ||
+        ch == Ch.BraceOpen || ch == Ch.BraceClose || ch == Ch.Hash || ch == Ch.Dollar ||
+        ch == Ch.At || isRegexOperator(ch)) break
+  }
+  input.acceptToken(regexText)
+})
 
 // ---- Names ----
 

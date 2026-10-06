@@ -75,9 +75,12 @@ RegexDeclaration {
   RegexName? nonBlock* (RegexBlock | ";")
 }
 
-// The body of a regex declaration is in the regex language, and is
-// read as one token.
+// The body of a regex declaration is in the regex language. Its pieces
+// are read by regexToken.
 RegexBlock[@name=Block] { "{" regexBody? "}" }
+
+// A block of code in a regex.
+RegexCode[@name=Block] { "{" element* "}" }
 
 EnumDeclaration { kw<"enum"> EnumName? }
 SubsetDeclaration { kw<"subset"> SubsetName? }
@@ -102,6 +105,16 @@ Identifier { identifier | plainName }
 TypeName { capIdentifier smiley? }
 
 @skip {} {
+  // The body of a regex declaration. Its text is the part that no child
+  // node covers.
+  regexBody[@name=Regex] {
+    regexStart
+    (regexText | Escape | CharacterClass | Assertion | regexQuote | regexOperator | regexComment |
+     regexBlockComment | regexCapture |
+     VariableName | AttributeName | SpecialVariable | RegexCode)*
+    regexBodyEnd
+  }
+
   // A Pod block. Its text is the part that no child node covers.
   Pod {
     podStart
@@ -179,7 +192,12 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 // These two need to see that no identifier character follows.
 @external tokens smileyToken from "./tokens" { smiley }
 @external tokens versionToken from "./tokens" { Version }
-@external tokens regexBodyToken from "./tokens" { regexBody[@name=Regex] }
+@external tokens regexToken from "./tokens" {
+  // The first and the last of these are empty.
+  regexStart, regexBodyEnd, regexText, CharacterClass, Assertion,
+  regexQuote[@name=StringLiteral], regexOperator[@name=Operator], regexComment[@name=LineComment],
+  regexBlockComment[@name=BlockComment], regexCapture[@name=VariableName]
+}
 @external tokens quoteToken from "./tokens" { quoteContent, quoteNestOpen, quoteNestClose, quoteEnd }
 // Tokens that depend on whether a term or an operator is expected.
 @external tokens termToken from "./tokens" {

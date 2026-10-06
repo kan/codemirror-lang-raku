@@ -75,7 +75,7 @@ say 1;
 ==>
 
 Program(PackageDeclaration(grammar, PackageName, Block(
-  RegexDeclaration(token, RegexName, Block(Regex, ⚠)),
+  RegexDeclaration(token, RegexName, Block(Regex(Operator, StringLiteral, Assertion), ⚠)),
   proto, RegexDeclaration(rule, RegexName, Block(Regex)),
   RegexDeclaration(token, RegexName, Block(Regex)))),
   Identifier, Number)
@@ -92,8 +92,8 @@ my regex b { y }
 
 ==>
 
-Program(RegexDeclaration(token, RegexName, Block(Regex)),
-  my, RegexDeclaration(regex, RegexName, Block(Regex, ⚠)),
+Program(RegexDeclaration(token, RegexName, Block(Regex(Operator, Operator, Assertion))),
+  my, RegexDeclaration(regex, RegexName, Block(Regex(Operator), ⚠)),
   my, RegexDeclaration(regex, RegexName, Block(Regex)))
 
 # Word lists that hold brackets, a backslash or their own delimiter

@@ -2,6 +2,11 @@
 
 ### New features
 
+- The body of a `token`, `rule` or `regex` declaration is highlighted. Its
+  `Regex` node has children for character classes (`CharacterClass`),
+  `<…>` assertions (`Assertion`), quoted literals, escapes, quantifiers
+  and anchors, variables, comments, and the blocks of code in it, which
+  are read as code.
 - `multi foo(…) { }`, `proto foo(…) {*}` and `only foo(…) { }`, without the
   word `sub`, are `RoutineDeclaration` nodes with a `RoutineName`. The
   node has no declarator keyword, and `multi` is the node before it.

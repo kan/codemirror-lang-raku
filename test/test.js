@@ -85,6 +85,33 @@ describe("highlighting", () => {
     ])
   })
 
+  it("styles the pieces of a regex declaration body", () => {
+    assert.deepStrictEqual(highlight("token t { \\d+ <name> <[a..z]> 'x' $<y>=. { say 1 } # c\n}"), [
+      ["token", "tok-keyword"],
+      ["t", "tok-variableName tok-definition"],
+      ["{", "tok-punctuation"],
+      [" \\d", "tok-string2"],
+      ["+", "tok-operator"],
+      [" ", "tok-string2"],
+      ["<name>", "tok-variableName"],
+      [" ", "tok-string2"],
+      ["<[a..z]>", "tok-string"],
+      [" ", "tok-string2"],
+      ["'x'", "tok-string"],
+      [" ", "tok-string2"],
+      ["$<y>", "tok-variableName"],
+      ["=. ", "tok-string2"],
+      ["{", "tok-punctuation"],
+      ["say", "tok-variableName"],
+      ["1", "tok-number"],
+      ["}", "tok-punctuation"],
+      [" ", "tok-string2"],
+      ["# c", "tok-comment"],
+      ["\n", "tok-string2"],
+      ["}", "tok-punctuation"]
+    ])
+  })
+
   it("styles the directives, headings and formatting codes of Pod", () => {
     assert.deepStrictEqual(highlight("=begin pod\n=head1 Title\nSome B<bold> and C<code>, I<x> L<y> E<z>\n=end pod"), [
       ["=begin pod", "tok-meta"],
@@ -297,6 +324,9 @@ grammar G {
   token t {
     \\d+
     <word>
+    | alternative
+    | { say 1 +
+          2 }
   }
 }`))
 

@@ -73,7 +73,7 @@ token t { <+[a..z]-[}]> x }; / <+[a..z] - [/]> /; 1
 
 ==>
 
-Program(RegexDeclaration(token, RegexName, Block(Regex)), Regex, Number)
+Program(RegexDeclaration(token, RegexName, Block(Regex(CharacterClass))), Regex, Number)
 
 # rx and m
 
@@ -129,11 +129,120 @@ say 1;
 ==>
 
 Program(PackageDeclaration(grammar, PackageName, Block(
-  RegexDeclaration(token, RegexName, Block(Regex)),
-  RegexDeclaration(rule, RegexName, Block(Regex)),
-  RegexDeclaration(regex, RegexName, Block(Regex)),
+  RegexDeclaration(token, RegexName,
+    Block(Regex(Assertion, Operator, StringLiteral, Operator, Escape, Operator, CharacterClass))),
+  RegexDeclaration(rule, RegexName, Block(Regex(Block(Identifier, Number)))),
+  RegexDeclaration(regex, RegexName, Block(Regex(StringLiteral))),
   RegexDeclaration(token, RegexName, Block(Regex)))),
   Identifier, Number)
+
+# The pieces of a regex declaration body
+
+token t {
+  ^ \d+ % ',' $<name>=<.ident> $   # a comment, with a } in it
+  [ <!before x> | <-[a..z]>+ | <+[\w] - [_]> ] ** 2..3
+  $x @list $0 $!attr $*dynamic "quoted }" $$
+}
+say 1;
+
+==>
+
+Program(RegexDeclaration(token, RegexName, Block(Regex(
+  Operator, Escape, Operator, Operator, StringLiteral, VariableName, Assertion, Operator, LineComment,
+  Assertion, Operator, CharacterClass, Operator, Operator, CharacterClass, Operator,
+  VariableName, VariableName, VariableName, AttributeName, SpecialVariable, StringLiteral, Operator))),
+  Identifier, Number)
+
+# Code in a regex declaration body
+
+token t {
+  a { say "}"; my %h = { b => { 1 } }; } c
+  <?{ $x > 1 }> :my $y = 2; d
+}
+rule u { {} <{ 'e' }> }
+say 3;
+
+==>
+
+Program(RegexDeclaration(token, RegexName, Block(Regex(
+  Block(Identifier, StringLiteral, my, VariableName, Operator, Block(Identifier, Operator, Block(Number))),
+  Assertion, VariableName))),
+  RegexDeclaration(rule, RegexName, Block(Regex(Block, Assertion))),
+  Identifier, Number)
+
+# What is not closed in a regex declaration body
+
+token t { a < b ' c
+  d }
+say 1;
+token u { foo <b }
+token v { <name }
+say 2;
+
+==>
+
+Program(RegexDeclaration(token, RegexName, Block(Regex)), Identifier, Number,
+  RegexDeclaration(token, RegexName, Block(Regex)), RegexDeclaration(token, RegexName, Block(Regex)),
+  Identifier, Number)
+
+# Word boundaries and capture markers in a regex declaration body
+
+token t { << \w+ >> | « \d » | foo <( \d+ )> bar }
+say 1;
+
+==>
+
+Program(RegexDeclaration(token, RegexName, Block(Regex(Operator, Escape, Operator, Operator, Operator,
+  Operator, Escape, Operator, Operator, Operator, Escape, Operator, Operator))), Identifier, Number)
+
+# Character classes of several kinds and lines
+
+grammar G {
+  token t {
+    <-[ a..z
+      } ]>+ <?[a..z]> <+alpha-[a]> <![x]>
+  }
+  token u { b }
+}
+say 1;
+
+==>
+
+Program(PackageDeclaration(grammar, PackageName, Block(
+  RegexDeclaration(token, RegexName, Block(Regex(CharacterClass, Operator, CharacterClass, CharacterClass,
+    CharacterClass))),
+  RegexDeclaration(token, RegexName, Block(Regex)))), Identifier, Number)
+
+# An embedded comment and a backslash at the end of a line in a regex
+
+token t { a #`( x } ) b # c }
+  d \
+}
+token u { e \
+token v { f }
+say 1;
+
+==>
+
+Program(RegexDeclaration(token, RegexName, Block(Regex(BlockComment, LineComment))),
+  RegexDeclaration(token, RegexName, Block(Regex, ⚠)), RegexDeclaration(token, RegexName, Block(Regex)),
+  Identifier, Number)
+
+# A regex declaration in the code of a regex, and code that is not closed
+
+token t { { my token u { x+ }; } }
+grammar G {
+  token a { x {
+  token b { \d }
+}
+
+==>
+
+Program(RegexDeclaration(token, RegexName, Block(Regex(
+    Block(my, RegexDeclaration(token, RegexName, Block(Regex(Operator))))))),
+  PackageDeclaration(grammar, PackageName, Block(
+    RegexDeclaration(token, RegexName, Block(Regex(
+      Block(RegexDeclaration(token, RegexName, Block(Regex(Escape))))), ⚠)), ⚠)))
 
 # Regex declaration with a signature and adverbs
 
@@ -145,9 +254,9 @@ my token t { a }
 ==>
 
 Program(
-  RegexDeclaration(token, RegexName, Block(Regex)),
-  RegexDeclaration(token, RegexName, Block(Regex)),
-  RegexDeclaration(regex, RegexName, Parens(VariableName), Block(Regex)),
+  RegexDeclaration(token, RegexName, Block(Regex(Escape, Operator))),
+  RegexDeclaration(token, RegexName, Block(Regex(Assertion))),
+  RegexDeclaration(regex, RegexName, Parens(VariableName), Block(Regex(VariableName))),
   my, RegexDeclaration(token, RegexName, Block(Regex)))
 
 # A declarator used as a key is not a declaration

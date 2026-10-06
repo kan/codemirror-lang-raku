@@ -52,6 +52,8 @@ export const rakuLanguage = LRLanguage.define({
         Version: t.literal,
         "StringLiteral Heredoc": t.string,
         Regex: t.regexp,
+        CharacterClass: t.character,
+        Assertion: t.function(t.variableName),
         "Pod PodFormat": t.docComment,
         PodDirective: t.meta,
         // These are still part of a comment, and are styled as one where
