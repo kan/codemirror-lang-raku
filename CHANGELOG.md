@@ -21,6 +21,12 @@
 
 ### Bug fixes
 
+- A `"…` or `qq[…` quote that is not closed ends with its line. With no
+  closing delimiter in the rest of the document, it used to turn all of
+  that into a string.
+- The body of a regex declaration that is not closed ends before the next
+  `token`, `rule` or `regex` declaration, so that the declarations after
+  it are still found.
 - A heredoc opener that is only mentioned in a string or in a comment no
   longer starts a heredoc. Heredocs are now found from the quote tokens
   of the line, not from its text.

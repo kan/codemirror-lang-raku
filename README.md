@@ -151,10 +151,17 @@ Heuristics that can be wrong:
 - A word spelled like a keyword is a keyword wherever it appears, except
   as a method name, as a declared name, or before `=>`: `take(1)` is
   highlighted as a keyword.
-- What happens to an unclosed construct depends on its kind. The opener
-  of a quote that does not interpolate (`'…'`, `q`), of a regex or of a
-  heredoc is read as ordinary code. A `"…"` or `qq` quote, a Pod block,
-  an embedded comment or the body of a regex declaration runs to the end
+- A quote that interpolates (`"…`, `qq[…`) and is not closed ends with
+  its line. "Not closed" means that no closing delimiter follows
+  anywhere: with a later `"` in the document, a `"` that was just typed
+  opens a string that runs up to it.
+- A quote that does not interpolate (`'…'`, `q{…}`), a regex and a
+  heredoc have to be closed. Otherwise their opener is read as ordinary
+  code.
+- The body of a regex declaration that is not closed runs up to the next
+  line that starts with `token`, `rule` or `regex`, or to the end of the
+  document.
+- A Pod block or an embedded comment that is not closed runs to the end
   of the document.
 
 ## Development

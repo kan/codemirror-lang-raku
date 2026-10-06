@@ -7,7 +7,8 @@ import {
   Identifier, TypeName, StringLiteral, Interpolation, self, True, False, Nil,
   PackageName, RoutineName, methodRoutineName, RegexName, EnumName, SubsetName, ConstantName,
   methodDot, declaredName, declaredMethodName, smiley, fatArrowKey, wordOperator,
-  rawString, quoteStart, quoteContent, quoteNestOpen, quoteNestClose, quoteEnd, regexBody
+  rawString, quoteStart, quoteContent, quoteNestOpen, quoteNestClose, quoteEnd, quoteLineEnd, quoteClosedContent, unclosedString,
+  regexBody
 } from "./syntax.grammar.terms"
 
 const enum Ch {
@@ -178,13 +179,16 @@ class Quote {
               readonly interpolates: number,
               // Whether a backslash that does not start an escape still
               // takes the delimiter after it out of play: q:c[a \] b]
-              readonly escapes: boolean) {
+              readonly escapes: boolean,
+              // Whether it is known to be closed: its closing delimiter
+              // was looked for at a line break, and found.
+              readonly closed: boolean) {
     let hash = parent ? parent.hash : 7
-    for (let part of [open, count, depth, interpolates, escapes ? 1 : 0]) hash = (hash * 31 + part) | 0
+    for (let part of [open, count, depth, interpolates, escapes ? 1 : 0, closed ? 1 : 0]) hash = (hash * 31 + part) | 0
     this.hash = hash
   }
-  withDepth(depth: number) {
-    return new Quote(this.parent, this.open, this.close, this.count, depth, this.interpolates, this.escapes)
+  with(depth: number, closed: boolean) {
+    return new Quote(this.parent, this.open, this.close, this.count, depth, this.interpolates, this.escapes, closed)
   }
 }
 
@@ -230,8 +234,13 @@ for (let term of [VariableName, AttributeName, SpecialVariable, operatorVariable
 for (let term of [Identifier, TypeName, smiley, declaredName, declaredMethodName, PackageName, RoutineName,
                   methodRoutineName, RegexName, EnumName, SubsetName, ConstantName])
   termModes.set(term, Mode.AfterName)
-// The `}` of "{...}" in a string does not take a subscript.
-for (let term of [quoteContent, Interpolation]) termModes.set(term, Mode.Term)
+// The `}` of "{...}" in a string does not take a subscript. A quote
+// that was not closed ends with its line, and a statement follows it.
+for (let term of [quoteContent, quoteClosedContent, Interpolation, quoteLineEnd, unclosedString])
+  termModes.set(term, Mode.Term)
+
+// The two nodes that are named StringLiteral.
+function isString(term: number) { return term == StringLiteral || term == unclosedString }
 
 // The mode after an operator, from its first three characters. `after`
 // is the mode before it.
@@ -298,20 +307,20 @@ function hasNewline(input: InputStream, from: number, to: number) {
 // and the text of a heredoc close the ones before them.
 function heredocsAfter(node: Tree, input: InputStream, before: readonly string[]) {
   // Most reused nodes are single tokens.
-  if (!node.children.length && node.type.id != StringLiteral && node.type.id != Heredoc) return before
+  if (!node.children.length && !isString(node.type.id) && node.type.id != Heredoc) return before
   let cursor = node.cursor(), found: {pos: number, terminator: string}[] = [], closedAt = -1
   // Goes over the node at the cursor from its end, and tells whether
   // the heredocs before some point in it are closed.
   function scan(): boolean {
     let type = cursor.type.id, {from, to} = cursor
     if (type == Heredoc) { closedAt = to; return true }
-    if (type == StringLiteral) {
+    if (isString(type)) {
       let terminator = heredocTerminator(input, from)
       if (terminator != null) found.push({pos: from, terminator})
     }
     if (!cursor.lastChild()) return false
     // Between the pieces of a string lies its text, not whitespace.
-    let gaps = type != StringLiteral
+    let gaps = !isString(type)
     for (let gapEnd = to;;) {
       if (gaps && hasNewline(input, cursor.to, gapEnd)) { closedAt = gapEnd; break }
       if (scan()) break
@@ -340,17 +349,22 @@ export const trackContext = new ContextTracker<Context>({
         let opening = readOpening(input)
         if (!opening) return context
         let quote = new Quote(context.quote, opening.open, opening.close, opening.count, 0,
-                              opening.interpolates, opening.escapes)
+                              opening.interpolates, opening.escapes, false)
         return new Context(Mode.Term, quote, withHeredocAt(context.heredocs, input, 0))
       }
+      case quoteClosedContent:
+        return context.quote ? new Context(Mode.Term, context.quote.with(context.quote.depth, true), context.heredocs)
+          : context
       case quoteNestOpen: case quoteNestClose: {
         let quote = context.quote
         if (!quote) return context
         let depth = quote.depth + (term == quoteNestOpen ? 1 : -1)
-        return new Context(Mode.Term, quote.withDepth(depth), context.heredocs)
+        return new Context(Mode.Term, quote.with(depth, quote.closed), context.heredocs)
       }
-      case quoteEnd:
-        return new Context(Mode.AfterTerm, context.quote && context.quote.parent, context.heredocs)
+      case quoteEnd: case quoteLineEnd:
+        // After a quote that ended with its line, a new statement starts.
+        return new Context(term == quoteEnd ? Mode.AfterTerm : Mode.Term, context.quote && context.quote.parent,
+                           context.heredocs)
     }
     // The whitespace token has no term to go by. It is the only token
     // that starts with a space. A line break in it leaves the heredocs
@@ -624,9 +638,10 @@ function readOpening(input: InputStream, at = 0): Opening | null {
 
 // The offset after the delimiter that closes a quote whose content
 // starts at `pos`, or -1 when it is not closed.
-function rawEnd(input: InputStream, pos: number, opening: Pick<Opening, "open" | "close" | "count" | "escapes">) {
+function rawEnd(input: InputStream, pos: number, opening: Pick<Opening, "open" | "close" | "count" | "escapes">,
+                depth = 1) {
   let {open, close, count} = opening
-  for (let depth = 1;;) {
+  for (;;) {
     let ch = input.peek(pos)
     if (ch < 0) return -1
     if (ch == Ch.Backslash && opening.escapes) pos += 2
@@ -804,8 +819,13 @@ export const termToken = new ExternalTokenizer((input, stack) => {
   let opening = readOpening(input)
   if (!opening) return
   if (opening.kind == "interpolating") return input.acceptToken(quoteStart, opening.start)
-  let end = opening.kind == "raw" ? rawEnd(input, opening.start, opening) : regexTokenEnd(input, opening)
-  if (end > 0) input.acceptToken(opening.kind == "raw" ? rawString : Regex, end)
+  if (opening.kind != "raw") {
+    let end = regexTokenEnd(input, opening)
+    if (end > 0) input.acceptToken(Regex, end)
+    return
+  }
+  let end = rawEnd(input, opening.start, opening)
+  if (end > 0) input.acceptToken(rawString, end)
 })
 
 // Whether a sigil other than `$` interpolates: only when a subscript or
@@ -832,9 +852,21 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
     if (end > 0) return input.acceptToken(rawString, end)
   }
   let start = input.pos
+  // A quote that is not closed ends with its line, in an empty token.
+  // Whether it is closed is only looked into at its first line break:
+  // looking for the delimiter where the quote opens would make every
+  // string depend on the text up to its end, and a token that looks
+  // far ahead keeps the nodes around it from being reused. The token
+  // that crosses that line break tells the context that the quote is
+  // closed, so that the lines after it are not looked into again.
+  let found = false
+  let isClosed = () => quote.closed || found || (found = rawEnd(input, 0, quote, quote.depth + 1) >= 0)
   for (;;) {
     let next = input.next
-    if (next < 0) break
+    if (next < 0 || next == Ch.Newline && !isClosed()) {
+      if (input.pos == start) return input.acceptToken(quoteLineEnd)
+      break
+    }
     let atClose = next == close && repeats(input, 0, close, count)
     if (atClose || nests && next == open && repeats(input, 0, open, count)) {
       if (input.pos > start) break
@@ -842,7 +874,11 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
       return input.acceptToken(!atClose ? quoteNestOpen : quote.depth ? quoteNestClose : quoteEnd)
     }
     if (next == Ch.Backslash) {
-      if (interpolates & Interpolate.Backslash) break
+      // A backslash at the end of a line escapes the line break, which
+      // a quote that ends with the line does not go past.
+      let after = input.peek(1), lineBreak = after < 0 || after == Ch.Newline && !isClosed()
+      if (interpolates & Interpolate.Backslash && !lineBreak) break
+      if (lineBreak) { input.advance(); continue }
       // Still keeps a delimiter after it from closing the quote.
       if (quote.escapes && input.peek(1) >= 0) input.advance()
     } else if (next == Ch.Dollar) {
@@ -857,7 +893,7 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
     }
     input.advance()
   }
-  if (input.pos > start) input.acceptToken(quoteContent)
+  if (input.pos > start) input.acceptToken(found ? quoteClosedContent : quoteContent)
 })
 
 // The text of a heredoc: the lines after the one that holds its opener,
@@ -889,7 +925,13 @@ export const heredocToken = new ExternalTokenizer((input, stack) => {
 export const regexBodyToken = new ExternalTokenizer((input, stack) => {
   if (!stack.canShift(regexBody)) return
   let end = regexEnd(input, 0, Ch.BraceOpen, Ch.BraceClose, 1)
-  if (end < 0) {
+  // A body does not hold another regex declaration. When one starts on
+  // a line before the closing brace that was found, that brace belongs
+  // to something further out, and this body was not closed.
+  let next = nextRegexDeclaration(input, end)
+  if (next >= 0) {
+    if (next > 0) input.acceptToken(regexBody, next)
+  } else if (end < 0) {
     // Not closed: the rest of the input.
     skipToEnd(input)
     if (input.pos > stack.pos) input.acceptToken(regexBody)
@@ -897,6 +939,37 @@ export const regexBodyToken = new ExternalTokenizer((input, stack) => {
     input.acceptToken(regexBody, end)
   }
 })
+
+const regexDeclarator = /^(token|rule|regex)$/
+const regexDeclaratorPrefix = /^(proto|multi|my|our)$/
+
+// The offset of the end of the line before the first line that starts
+// a regex declaration, before offset `to`, or -1. A negative `to`
+// stands for the end of the input. Such a line holds a declarator, a
+// name, and further on a brace: `token name {`. In a regex, the words
+// alone can be literals: `token | rule`
+function nextRegexDeclaration(input: InputStream, to: number) {
+  for (let pos = 0; to < 0 || pos < to; pos++) {
+    let ch = input.peek(pos)
+    if (ch < 0) return -1
+    if (ch != Ch.Newline) continue
+    let start = blanksEnd(input, pos + 1), end = nameEnd(input, start)
+    // proto token, my regex
+    if (end > 0 && isBlank(input.peek(end)) && regexDeclaratorPrefix.test(word(input, start, end))) {
+      start = blanksEnd(input, end)
+      end = nameEnd(input, start)
+    }
+    if (end < 0 || !isBlank(input.peek(end)) || !regexDeclarator.test(word(input, start, end))) continue
+    let name = blanksEnd(input, end), after = nameEnd(input, name)
+    if (after < 0) continue
+    for (after = categoryEnd(input, name, after);; after++) {
+      let next = input.peek(after)
+      if (next == Ch.BraceOpen) return pos
+      if (next < 0 || next == Ch.Newline) break
+    }
+  }
+  return -1
+}
 
 // ---- Names ----
 

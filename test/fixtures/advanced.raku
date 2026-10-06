@@ -91,6 +91,12 @@ my $hex = :16<FF> + 0x10;
 say $half < 3 ?? 'small' !! 'big';
 say <a b c>.elems, ' ', (%*ENV<HOME> // '~');
 
+# A string that spans lines, with interpolation on each of them.
+my $report = "Total: $n
+  half of it: { $half }
+  as hex: $hex.fmt('%x')
+";
+
 # Quotes whose adverbs switch kinds of interpolation on and off.
 my &plus = &infix:<+++>;
 say q:c[sum: { plus(1, 2) } costs $5.00 \] ], qq:!c{ a {literal} block, $n times };

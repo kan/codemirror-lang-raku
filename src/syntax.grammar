@@ -32,6 +32,7 @@ nonBlock {
   Number |
   Version |
   StringLiteral |
+  unclosedString |
   Regex |
   PairKey |
   keyword |
@@ -94,13 +95,20 @@ TypeName { capIdentifier smiley? }
   StringLiteral {
     // A quote that does not interpolate is one token.
     rawString |
-    quoteStart (
-      quoteContent | quoteNestOpen | quoteNestClose | Escape | Interpolation |
-      // A `$` that does not start a variable is a lone sigil.
-      VariableName | AttributeName | SpecialVariable | sigil |
-      // After a variable: "@a[0]", "&f(1)", "%h<k>", "$o.m()"
-      Brackets | Parens | rawString | MethodCall
-    )* quoteEnd
+    quoteStart quotePart* quoteEnd
+  }
+
+  // A quote that is not closed ends with its line. It is a node of its
+  // own, so that the tokenizers can tell that no term precedes the
+  // next line.
+  unclosedString[@name=StringLiteral] { quoteStart quotePart* quoteLineEnd }
+
+  quotePart {
+    quoteContent | quoteClosedContent | quoteNestOpen | quoteNestClose | Escape | Interpolation |
+    // A `$` that does not start a variable is a lone sigil.
+    VariableName | AttributeName | SpecialVariable | sigil |
+    // After a variable: "@a[0]", "&f(1)", "%h<k>", "$o.m()"
+    Brackets | Parens | rawString | MethodCall
   }
 }
 
@@ -157,7 +165,12 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 @external tokens smileyToken from "./tokens" { smiley }
 @external tokens versionToken from "./tokens" { Version }
 @external tokens regexBodyToken from "./tokens" { regexBody[@name=Regex] }
-@external tokens quoteToken from "./tokens" { quoteContent, quoteNestOpen, quoteNestClose, quoteEnd }
+@external tokens quoteToken from "./tokens" {
+  quoteContent, quoteNestOpen, quoteNestClose, quoteEnd, quoteLineEnd,
+  // Text that crosses the first line break of a quote, where its
+  // closing delimiter was looked for and found.
+  quoteClosedContent
+}
 // Tokens that depend on whether a term or an operator is expected.
 @external tokens termToken from "./tokens" {
   rawString, quoteStart, Regex, fatArrowKey, wordOperator[@name=Operator],

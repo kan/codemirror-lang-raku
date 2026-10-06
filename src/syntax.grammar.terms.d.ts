@@ -10,4 +10,4 @@ export declare const
   methodDot: number, declaredName: number, declaredMethodName: number, smiley: number,
   fatArrowKey: number, wordOperator: number,
   rawString: number, quoteStart: number, quoteContent: number, quoteNestOpen: number,
-  quoteNestClose: number, quoteEnd: number, regexBody: number
+  quoteNestClose: number, quoteEnd: number, quoteLineEnd: number, quoteClosedContent: number, unclosedString: number, regexBody: number
