@@ -1,5 +1,9 @@
 # codemirror-lang-raku
 
+[![npm version](https://img.shields.io/npm/v/codemirror-lang-raku)](https://www.npmjs.com/package/codemirror-lang-raku)
+[![Test](https://github.com/kan/codemirror-lang-raku/actions/workflows/test.yml/badge.svg)](https://github.com/kan/codemirror-lang-raku/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/npm/l/codemirror-lang-raku)](LICENSE)
+
 [Raku](https://raku.org/) (formerly Perl 6) language support for the
 [CodeMirror 6](https://codemirror.net/) code editor: syntax highlighting,
 indentation, code folding, bracket matching and completion, built on a
@@ -36,7 +40,7 @@ new EditorView({
 })
 ```
 
-Highlighting only uses the standard tags of `@lezer/highlight`, so any
+Highlighting uses only the standard tags of `@lezer/highlight`, so any
 CodeMirror theme or highlight style applies.
 
 To load the language on demand, the way `@codemirror/language-data` does:
@@ -90,7 +94,8 @@ on incomplete code.
 | `LineComment`, `DocComment`, `BlockComment`, `Pod` | `#`, `#|` / `#=`, `` #`( ) ``, `=begin` … `=end` and the other Pod blocks |
 
 Each declarator keyword is a child node named after the keyword (`class`,
-`sub`, `token`, …).
+`sub`, `token`, …). The words `unit`, `multi`, `proto`, `my` and `our` are
+not part of the declaration node. They are the nodes right before it.
 
 ## Known limitations
 
@@ -98,25 +103,26 @@ Not supported yet:
 
 - Nothing is highlighted inside a regex. A regex literal, and the body of
   a `token` / `rule` / `regex` declaration, is a single `Regex` token,
-  including any code blocks in it
+  including any code blocks in it.
 - Nothing is highlighted inside a heredoc, a `<<…>>` / `«…»` word list or
-  a Pod block: no interpolation, no Pod formatting codes
-- Only the `qq` forms interpolate. Adverbs that switch interpolation on
-  or off (`q:c`, `q:s`, `qq:!c`) are not taken into account
+  a Pod block: no interpolation, no Pod formatting codes.
+- Only `"…"` and the `qq` forms interpolate. Adverbs that switch
+  interpolation on or off (`q:c`, `q:s`, `qq:!c`) are not taken into
+  account.
 - `multi`, `proto` and `only` declarations without `sub` or `method` are
-  not declaration nodes
+  not declaration nodes.
 - User-defined operators are recognized where they are declared
-  (`sub infix:<+++>`), not as `&infix:<+++>`
+  (`sub infix:<+++>`), not as `&infix:<+++>`.
 - Indentation follows brackets only. A statement continued on the next
-  line is not indented further
+  line is not indented further.
 - Completion offers a fixed list of names. It does not offer the
   variables, routines and classes of the document, and after a `.` it
   offers the same methods whatever the type of the invocant. In a
   string, only the code in `{ }` and in a subscript is completed, not
-  the method name of `"$x.name()"`
+  the method name of `"$x.name()"`.
 - Toggling a block comment wraps the selection in `` #`( `` … `)`. When
   the parentheses in the selection are not balanced, the comment ends
-  early or runs on past the selection
+  early or runs on past the selection.
 
 Heuristics that can be wrong:
 
@@ -130,8 +136,8 @@ Heuristics that can be wrong:
 - `q`, `qq`, `Q`, `m`, `rx`, `s`, `tr` and their variants start a quote
   when a delimiter follows directly, so a sigilless `s/2` is misread, and
   `q {…}` with a space is not a quote.
-- `%name` and `&name` are variables, except when squeezed between two
-  terms without a space: `$a%b`.
+- `%name` and `&name` are variables, except between two terms with no
+  space on either side: `$a%b`.
 - A word spelled like a keyword is a keyword wherever it appears, except
   as a method name, as a declared name, or before `=>`: `take(1)` is
   highlighted as a keyword.
@@ -139,9 +145,11 @@ Heuristics that can be wrong:
   in the text of the line before it. One mentioned in a string, or in a
   comment at the end of a line of code, counts when its terminator
   follows.
-- A quote, regex or heredoc that is not closed is not one: its opener is
-  read as ordinary code. An unclosed `"…"` or `qq` quote, Pod block,
-  embedded comment or regex declaration body runs to the end.
+- What happens to an unclosed construct depends on its kind. The opener
+  of a quote that does not interpolate (`'…'`, `q`), of a regex or of a
+  heredoc is read as ordinary code. A `"…"` or `qq` quote, a Pod block,
+  an embedded comment or the body of a regex declaration runs to the end
+  of the document.
 
 ## Development
 

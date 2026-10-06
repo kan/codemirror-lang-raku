@@ -36,7 +36,7 @@ CodeMirror 6 用の Raku（旧 Perl 6）言語サポートを作るリポジト�
 |---|---|
 | `npm install` | 依存の導入。`prepare` でビルドも走る |
 | `npm run build` | `rollup -c`。文法からパーサを生成し、`dist/` に ESM、CJS、型定義を出す |
-| `npm test` | ビルドしてから `mocha test/test.js` を実行する |
+| `npm test` | ビルドしてから `mocha test/test.js` を実行する。`.github/workflows/test.yml` が main への push と PR のたびに Node 22 と 24 で実行する |
 | `npm run dev` | `vite demo`。`demo/` のページを開発サーバーで出す。`src/` を直接読むので、ビルドは要らない |
 | `npm run build:demo` | `vite build demo`。`dist-demo/` に静的なページを出す。`.github/workflows/demo.yml` が main への push のたびに実行し、GitHub Pages（https://kan.github.io/codemirror-lang-raku/）へ出す |
 | `npm pack --dry-run` | 公開されるファイルの一覧を出す。`files` を変えたら確かめる |
