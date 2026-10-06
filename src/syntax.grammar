@@ -7,12 +7,18 @@
 
 @top Program { element* }
 
-@skip { whitespace | LineComment | DocComment | BlockComment | Pod | Heredoc }
+// Pod is not here. A skipped node that is made of several tokens makes
+// the parser record a lookahead when it is longer than 25 characters,
+// and that keeps the tokens before it from being reused after an edit.
+// It is an element, which can stand in all but a few of the places
+// where whitespace can.
+@skip { whitespace | LineComment | DocComment | BlockComment | Heredoc }
 
 element { nonBlock | Block | ";" }
 
 // Everything that can appear between a declarator and its body.
 nonBlock {
+  Pod |
   radixNumber |
   Parens |
   Brackets |
@@ -32,7 +38,6 @@ nonBlock {
   Number |
   Version |
   StringLiteral |
-  unclosedString |
   Regex |
   PairKey |
   keyword |
@@ -92,19 +97,21 @@ Identifier { identifier | fatArrowKey }
 TypeName { capIdentifier smiley? }
 
 @skip {} {
+  // A Pod block. Its text is the part that no child node covers.
+  Pod {
+    podStart
+    (podText | PodDirective | PodHeading | PodStrong | PodEmphasis | PodCode | PodLink | PodFormat)*
+    (podEnd | podEndDirective)
+  }
+
   StringLiteral {
     // A quote that does not interpolate is one token.
     rawString |
     quoteStart quotePart* quoteEnd
   }
 
-  // A quote that is not closed ends with its line. It is a node of its
-  // own, so that the tokenizers can tell that no term precedes the
-  // next line.
-  unclosedString[@name=StringLiteral] { quoteStart quotePart* quoteLineEnd }
-
   quotePart {
-    quoteContent | quoteClosedContent | quoteNestOpen | quoteNestClose | Escape | Interpolation |
+    quoteContent | quoteNestOpen | quoteNestClose | Escape | Interpolation |
     // A `$` that does not start a variable is a lone sigil.
     VariableName | AttributeName | SpecialVariable | sigil |
     // After a variable: "@a[0]", "&f(1)", "%h<k>", "$o.m()"
@@ -156,7 +163,10 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 
 // External tokenizers are tried in this order, before the tokens below.
 @external tokens blockComment from "./tokens" { BlockComment }
-@external tokens podToken from "./tokens" { Pod }
+@external tokens podToken from "./tokens" {
+  podStart[@name=PodDirective], podEnd, podEndDirective[@name=PodDirective], podText,
+  PodDirective, PodHeading, PodStrong, PodEmphasis, PodCode, PodLink, PodFormat
+}
 @external tokens heredocToken from "./tokens" { Heredoc }
 @external tokens methodDotToken from "./tokens" { methodDot[@name="."] }
 // Names in positions where a word is never a keyword: `method next`, `.default`.
@@ -165,12 +175,7 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 @external tokens smileyToken from "./tokens" { smiley }
 @external tokens versionToken from "./tokens" { Version }
 @external tokens regexBodyToken from "./tokens" { regexBody[@name=Regex] }
-@external tokens quoteToken from "./tokens" {
-  quoteContent, quoteNestOpen, quoteNestClose, quoteEnd, quoteLineEnd,
-  // Text that crosses the first line break of a quote, where its
-  // closing delimiter was looked for and found.
-  quoteClosedContent
-}
+@external tokens quoteToken from "./tokens" { quoteContent, quoteNestOpen, quoteNestClose, quoteEnd }
 // Tokens that depend on whether a term or an operator is expected.
 @external tokens termToken from "./tokens" {
   rawString, quoteStart, Regex, fatArrowKey, wordOperator[@name=Operator],

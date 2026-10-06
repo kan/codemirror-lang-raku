@@ -7,7 +7,7 @@ say 1;
 
 ==>
 
-Program(Pod, Identifier, Number)
+Program(Pod(PodDirective, PodDirective), Identifier, Number)
 
 # Nested blocks of other kinds
 
@@ -21,7 +21,7 @@ say 1;
 
 ==>
 
-Program(Pod, Identifier, Number)
+Program(Pod(PodDirective, PodDirective, PodHeading, PodDirective, PodDirective, PodDirective), Identifier, Number)
 
 # Abbreviated block ends at a blank line
 
@@ -32,7 +32,7 @@ say 1;
 
 ==>
 
-Program(Pod, Identifier, Number)
+Program(Pod(PodDirective, PodHeading), Identifier, Number)
 
 # Paragraph block
 
@@ -43,7 +43,7 @@ say 1;
 
 ==>
 
-Program(Pod, Identifier, Number)
+Program(Pod(PodDirective), Identifier, Number)
 
 # Indented pod
 
@@ -57,7 +57,7 @@ class A {
 ==>
 
 Program(PackageDeclaration(class, PackageName,
-  Block(Pod, RoutineDeclaration(method, RoutineName, Block))))
+  Block(Pod(PodDirective, PodDirective), RoutineDeclaration(method, RoutineName, Block))))
 
 # Finish block runs to the end
 
@@ -67,7 +67,7 @@ anything { goes ' here
 
 ==>
 
-Program(Identifier, Number, Pod)
+Program(Identifier, Number, Pod(PodDirective))
 
 # An assignment at the start of a line is not pod
 
@@ -92,7 +92,7 @@ say 1;
 
 ==>
 
-Program(Pod, Pod, Identifier, Number)
+Program(Pod(PodDirective), Pod(PodDirective), Identifier, Number)
 
 # Unclosed block runs to the end
 
@@ -101,4 +101,93 @@ never closed
 
 ==>
 
-Program(Pod)
+Program(Pod(PodDirective))
+
+# Formatting codes
+
+=begin pod
+Text with B<bold>, I<italic>, C<code>, L<http://example.com> and E<lt>.
+=end pod
+
+==>
+
+Program(Pod(PodDirective, PodStrong, PodEmphasis, PodCode, PodLink, PodFormat, PodDirective))
+
+# Formatting codes with other brackets, and nested
+
+=begin pod
+C<<a > b>>, B«c», B<I<nested> text>, C<a
+b>
+=end pod
+
+==>
+
+Program(Pod(PodDirective, PodCode, PodStrong, PodStrong, PodCode, PodDirective))
+
+# What is not a formatting code
+
+=begin pod
+A capital X<5 that is not closed, so B<this> is text too.
+
+The next paragraph, AB<c>, and a lone I < 3.
+C<not closed
+=item but B<this> is
+=end pod
+say 1;
+
+==>
+
+Program(Pod(PodDirective, PodDirective, PodStrong, PodDirective), Identifier, Number)
+
+# No formatting codes in a code block
+
+=begin code
+say B<x>;
+=end code
+=for code
+B<y>
+
+=code C<z>
+=input I<a>
+
+==>
+
+Program(Pod(PodDirective, PodDirective), Pod(PodDirective), Pod(PodDirective), Pod(PodDirective))
+
+# Directives and headings in a block
+
+=begin pod
+=head2 A heading with B<no codes>
+=item one
+=item2 two
+    =comment indented
+=end pod
+
+==>
+
+Program(Pod(PodDirective, PodDirective, PodHeading, PodDirective, PodDirective, PodDirective, PodDirective))
+
+# The end of a block has to name it
+
+=begin pod
+=end code
+=end podcast
+=end pod
+say 1;
+
+==>
+
+Program(Pod(PodDirective, PodDirective, PodDirective, PodDirective), Identifier, Number)
+
+# A heading with no text, and a block that is empty
+
+=head1
+=begin pod
+=end pod
+=for comment
+
+say 1;
+
+==>
+
+Program(Pod(PodDirective), Pod(PodDirective, PodDirective), Pod(PodDirective), Identifier, Number)

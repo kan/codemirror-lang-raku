@@ -52,7 +52,15 @@ export const rakuLanguage = LRLanguage.define({
         Version: t.literal,
         "StringLiteral Heredoc": t.string,
         Regex: t.regexp,
-        Pod: t.docComment,
+        "Pod PodFormat": t.docComment,
+        PodDirective: t.meta,
+        // These are still part of a comment, and are styled as one where
+        // a theme has no style for the second tag.
+        PodHeading: [t.docComment, t.heading],
+        PodStrong: [t.docComment, t.strong],
+        PodEmphasis: [t.docComment, t.emphasis],
+        PodCode: [t.docComment, t.monospace],
+        PodLink: [t.docComment, t.link],
         Escape: t.escape,
         "Interpolation/{ Interpolation/}": t.special(t.brace),
         LineComment: t.lineComment,

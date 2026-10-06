@@ -12,7 +12,25 @@ Log::Parse - the users' favourite { log parser
 
     my $entry = Log::Parse.parse('2026-01-02 ERROR disk "full"');
 
+=head1 DESCRIPTION
+
+Parses B<one line> at a time. A line holds a I<date>, a C<Level> and a
+message, as in C<< 2026-01-02 ERROR disk "full" >>. See L<https://raku.org>
+for the language, and X<5 < 6 for something that is not a formatting code.
+
+=item Dates are B<not I<validated>>.
+=item2 Levels are those of the C<Level> enum.
+
+=begin code
+my %pairs = Log::Parse.pairs('a=1 b=2');  # B<not bold>
+=end code
+
 =end pod
+
+=for comment
+A paragraph block, which ends at the blank line.
+
+=head2 A heading outside a delimited block
 
 unit module Log::Parse;
 
@@ -92,7 +110,7 @@ say $half < 3 ?? 'small' !! 'big';
 say <a b c>.elems, ' ', (%*ENV<HOME> // '~');
 
 # Word lists that interpolate.
-my @words = <<plain $n {$half} "two words">>, «$hex.fmt('%x') last»;
+my @words = <<plain $n {$half}>>, «$hex.fmt('%x') last», <<a long list, in which $n is not interpolated>>;
 
 # A string that spans lines, with interpolation on each of them.
 my $report = "Total: $n

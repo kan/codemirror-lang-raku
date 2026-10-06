@@ -96,24 +96,6 @@ Program(RegexDeclaration(token, RegexName, Block(Regex)),
   my, RegexDeclaration(regex, RegexName, Block(Regex, ⚠)),
   my, RegexDeclaration(regex, RegexName, Block(Regex)))
 
-# An unclosed quote with nested delimiters
-
-say qq[ a [ b
- c ] d;
-say 1;
-
-==>
-
-Program(Identifier, StringLiteral, Identifier, ⚠, Identifier, Identifier, Number)
-
-# An unclosed quote that ends in a backslash at the end of the input
-
-say "abc \
-
-==>
-
-Program(Identifier, StringLiteral)
-
 # Word lists that hold brackets, a backslash or their own delimiter
 
 my @b = << ( [ { >>;
@@ -127,25 +109,6 @@ Program(my, VariableName, Operator, StringLiteral,
   my, VariableName, Operator, StringLiteral, Identifier, Number,
   Identifier, StringLiteral, Identifier,
   Identifier, StringLiteral, StringLiteral(VariableName), StringLiteral(VariableName), MethodCall(MethodName))
-
-# A term is expected after a quote that ended with its line
-
-say "oops
-/foo/.say;
-m/bar/;
-
-==>
-
-Program(Identifier, StringLiteral, Regex, MethodCall(MethodName), Regex)
-
-# A backslash at the end of the line of an unclosed quote
-
-say "oops $x \
-say 1;
-
-==>
-
-Program(Identifier, StringLiteral(VariableName), Identifier, Number)
 
 # Unclosed quote word is not a quote
 
@@ -167,51 +130,22 @@ say 1;
 Program(my, VariableName, Operator, Operator, Identifier, Identifier, Identifier,
   Identifier, Number)
 
-# Unclosed interpolating quote ends with its line
+# Unclosed interpolating quote
 
 say qq[ a $b
 say 1;
 
 ==>
 
-Program(Identifier, StringLiteral(VariableName), Identifier, Number)
+Program(Identifier, StringLiteral(VariableName, ⚠))
 
-# Unclosed double-quoted string ends with its line
+# Unclosed double-quoted string
 
-say "oops $x and {1} \n so
-say 2, $y.z()
-
-==>
-
-Program(Identifier, StringLiteral(VariableName, Interpolation(Number), Escape),
-  Identifier, Number, VariableName, MethodCall(MethodName), Parens)
-
-# Unclosed string that ends in an interpolated call
-
-say 2, "end $y.z()
+"oops $x
 
 ==>
 
-Program(Identifier, Number, StringLiteral(VariableName, MethodCall(MethodName), Parens))
-
-# A string that spans lines and is closed
-
-say "one
-two $x";
-say 3, "unclosed
-
-==>
-
-Program(Identifier, StringLiteral(VariableName), Identifier, Number, StringLiteral)
-
-# An unclosed interpolation in an unclosed string
-
-say "a { 1
-say 2;
-
-==>
-
-Program(Identifier, StringLiteral(Interpolation(Number, Identifier, Number, ⚠)))
+Program(StringLiteral(VariableName, ⚠))
 
 # Code after an unclosed parenthesis is still tokenized
 

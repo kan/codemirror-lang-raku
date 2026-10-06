@@ -164,7 +164,7 @@ Program(StringLiteral(VariableName), StringLiteral, Parens(StringLiteral, String
 
 # Interpolation in word lists with double angles
 
-say <<a $b @c[0] {1 + 2} "quoted $d" \n>>, «$e.f() %h<k>»;
+say <<a $b @c[0] {1 + 2}>>, <<"quoted $d" \n>>, «$e.f() %h<k>»;
 my @list = <<
   $one
   two
@@ -174,12 +174,20 @@ say <a $not>, 1 << 2, @a »+« @b, @a».say;
 ==>
 
 Program(Identifier,
-  StringLiteral(VariableName, VariableName, Brackets(Number), Interpolation(Number, Operator, Number),
-    VariableName, Escape),
+  StringLiteral(VariableName, VariableName, Brackets(Number), Interpolation(Number, Operator, Number)),
+  StringLiteral(VariableName, Escape),
   StringLiteral(VariableName, MethodCall(MethodName), Parens, VariableName),
   my, VariableName, Operator, StringLiteral(VariableName),
   Identifier, StringLiteral, Number, Operator, Number, VariableName, Operator, VariableName,
   VariableName, Operator, MethodCall(MethodName))
+
+# A long word list with double angles is one token
+
+say <<a rather long list of $words that { goes } on>>, 1;
+
+==>
+
+Program(Identifier, StringLiteral, Number)
 
 # Less-than is not a word list
 

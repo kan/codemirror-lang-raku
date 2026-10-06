@@ -1,4 +1,7 @@
 export declare const
+  podStart: number, podEnd: number, podEndDirective: number, podText: number,
+  PodDirective: number, PodHeading: number, PodStrong: number, PodEmphasis: number,
+  PodCode: number, PodLink: number, PodFormat: number,
   BlockComment: number, DocComment: number, LineComment: number, Pod: number, Heredoc: number,
   MethodName: number, Version: number, Regex: number, Operator: number, Number: number,
   radixNumber: number, PairKey: number,
@@ -10,4 +13,4 @@ export declare const
   methodDot: number, declaredName: number, declaredMethodName: number, smiley: number,
   fatArrowKey: number, wordOperator: number,
   rawString: number, quoteStart: number, quoteContent: number, quoteNestOpen: number,
-  quoteNestClose: number, quoteEnd: number, quoteLineEnd: number, quoteClosedContent: number, unclosedString: number, regexBody: number
+  quoteNestClose: number, quoteEnd: number, regexBody: number

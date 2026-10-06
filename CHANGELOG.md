@@ -2,8 +2,11 @@
 
 ### New features
 
+- Pod blocks have child nodes for their directives (`PodDirective`),
+  headings (`PodHeading`) and formatting codes (`PodStrong`,
+  `PodEmphasis`, `PodCode`, `PodLink`, `PodFormat`), which are highlighted.
 - Variables, blocks and escapes are interpolated in `<<…>>` and `«…»`
-  word lists.
+  word lists of up to 24 characters.
 - Completion offers the names that the document declares: the variables
   and attributes in scope, routines, classes, enums, subsets and
   constants, and after a `.` the methods.
@@ -23,9 +26,6 @@
 
 ### Bug fixes
 
-- A `"…` or `qq[…` quote that is not closed ends with its line. With no
-  closing delimiter in the rest of the document, it used to turn all of
-  that into a string.
 - The body of a regex declaration that is not closed ends before the next
   `token`, `rule` or `regex` declaration, so that the declarations after
   it are still found.

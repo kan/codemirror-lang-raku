@@ -94,7 +94,8 @@ on incomplete code.
 | `StringLiteral` | A quote of any kind. One that interpolates has `Escape`, `Interpolation`, variable, `Brackets`, `Parens` and `MethodCall` children |
 | `Heredoc` | The text of a heredoc, from the line after its `q:to/END/` opener through its terminator. The opener is a `StringLiteral` |
 | `Regex` | `/…/`, `rx//`, `m//`, `s///`, `tr///`, or the body of a regex declaration |
-| `LineComment`, `DocComment`, `BlockComment`, `Pod` | `#`, `#|` / `#=`, `` #`( ) ``, `=begin` … `=end` and the other Pod blocks |
+| `LineComment`, `DocComment`, `BlockComment` | `#`, `#|` / `#=`, `` #`( ) `` |
+| `Pod` | `=begin` … `=end` and the other Pod blocks. Its children are `PodDirective` (`=begin`, `=head1`, `=end pod`), `PodHeading` (the text after `=head1`), and the formatting codes `PodStrong` (`B<…>`), `PodEmphasis` (`I<…>`), `PodCode` (`C<…>`), `PodLink` (`L<…>`) and `PodFormat` (the others) |
 
 Each declarator keyword is a child node named after the keyword (`class`,
 `sub`, `token`, …). The words `unit`, `multi`, `proto`, `my` and `our` are
@@ -107,13 +108,22 @@ Not supported yet:
 - Nothing is highlighted inside a regex. A regex literal, and the body of
   a `token` / `rule` / `regex` declaration, is a single `Regex` token,
   including any code blocks in it.
-- Nothing is highlighted inside a heredoc or a Pod block: no
-  interpolation in a `qq:to` heredoc, no Pod formatting codes.
+- Nothing is highlighted inside a heredoc: there is no interpolation in
+  a `qq:to` heredoc.
+- In Pod, a formatting code is one token: the codes inside it
+  (`B<I<…>>`) are not told apart. Formatting codes are left alone in a
+  block that is code (`=begin code`, `=code`, `=for code`), but not in a
+  code block inside another block, nor in an indented code paragraph.
+  Tables and the configuration after a directive (`:numbered`) are plain
+  text.
 - A `<<…>>` or `«…»` word list that spans lines and holds `{ }`, `( )` or
   `;` is not taken to be a word list, and neither is one in a subscript
-  or after a pair key (`%h«$key»`, `:a<<b $c>>`). One that holds an
-  unbalanced `{`, or its own delimiter, is a single token in which
-  nothing is interpolated.
+  or after a pair key (`%h«$key»`, `:a<<b $c>>`). Nothing is interpolated
+  in one that is longer than 24 characters, or that holds an unbalanced
+  `{` or its own delimiter: it is a single token.
+- A Pod block is read where a statement or a term can stand, not
+  everywhere that whitespace can: one between `class` and the name of
+  the class is not read as Pod.
 - A quote adverb that is switched off through its argument, as in
   `qq:c(False)[…]`, counts as switched on.
 - The brackets of a block comment are picked for the `toggleBlockComment`
@@ -156,18 +166,14 @@ Heuristics that can be wrong:
 - A word spelled like a keyword is a keyword wherever it appears, except
   as a method name, as a declared name, or before `=>`: `take(1)` is
   highlighted as a keyword.
-- A quote that interpolates (`"…`, `qq[…`) and is not closed ends with
-  its line. "Not closed" means that no closing delimiter follows
-  anywhere: with a later `"` in the document, a `"` that was just typed
-  opens a string that runs up to it.
 - A quote that does not interpolate (`'…'`, `q{…}`), a regex and a
   heredoc have to be closed. Otherwise their opener is read as ordinary
   code.
+- A quote that interpolates (`"…`, `qq[…`), a Pod block or an embedded
+  comment that is not closed runs to the end of the document.
 - The body of a regex declaration that is not closed runs up to the next
-  line that starts with `token`, `rule` or `regex`, or to the end of the
-  document.
-- A Pod block or an embedded comment that is not closed runs to the end
-  of the document.
+  line that starts a `token`, `rule` or `regex` declaration, or to the
+  end of the document.
 
 ## Development
 

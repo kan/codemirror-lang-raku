@@ -1,13 +1,15 @@
 import {ContextTracker, ExternalTokenizer, InputStream, Stack} from "@lezer/lr"
-import {Tree, TreeBuffer} from "@lezer/common"
+import {Tree, SyntaxNode} from "@lezer/common"
 import {
   BlockComment, DocComment, LineComment, Pod, Heredoc,
+  podStart, podEnd, podEndDirective, podText, PodDirective, PodHeading, PodStrong, PodEmphasis, PodCode, PodLink,
+  PodFormat,
   MethodName, Version, Regex, Operator, Number as NumberTerm, radixNumber, PairKey,
   VariableName, AttributeName, SpecialVariable, operatorVariable,
   Identifier, TypeName, StringLiteral, Interpolation, self, True, False, Nil,
   PackageName, RoutineName, methodRoutineName, RegexName, EnumName, SubsetName, ConstantName,
   methodDot, declaredName, declaredMethodName, smiley, fatArrowKey, wordOperator,
-  rawString, quoteStart, quoteContent, quoteNestOpen, quoteNestClose, quoteEnd, quoteLineEnd, quoteClosedContent, unclosedString,
+  rawString, quoteStart, quoteContent, quoteNestOpen, quoteNestClose, quoteEnd,
   regexBody
 } from "./syntax.grammar.terms"
 
@@ -179,20 +181,40 @@ class Quote {
               readonly interpolates: number,
               // Whether a backslash that does not start an escape still
               // takes the delimiter after it out of play: q:c[a \] b]
-              readonly escapes: boolean,
-              // Whether it is known to be closed: its closing delimiter
-              // was looked for at a line break, and found.
-              readonly closed: boolean) {
+              readonly escapes: boolean) {
     let hash = parent ? parent.hash : 7
-    for (let part of [open, count, depth, interpolates, escapes ? 1 : 0, closed ? 1 : 0]) hash = (hash * 31 + part) | 0
+    for (let part of [open, count, depth, interpolates, escapes ? 1 : 0]) hash = (hash * 31 + part) | 0
     this.hash = hash
   }
-  with(depth: number, closed: boolean) {
-    return new Quote(this.parent, this.open, this.close, this.count, depth, this.interpolates, this.escapes, closed)
+  withDepth(depth: number) {
+    return new Quote(this.parent, this.open, this.close, this.count, depth, this.interpolates, this.escapes)
   }
 }
 
 const noHeredocs: readonly string[] = []
+
+const enum PodKind {
+  // =begin name ... =end name
+  Delimited,
+  // =for name, =head1, =TITLE: up to the next blank line or directive.
+  Paragraph,
+  // =finish: the rest of the file.
+  Finish,
+}
+
+// A Pod block that is being read piece by piece.
+class PodBlock {
+  hash: number
+  constructor(readonly kind: PodKind,
+              // What follows `=begin`, which `=end` has to repeat.
+              readonly name: string,
+              // Whether it holds code, in which formatting codes are not read.
+              readonly code: boolean) {
+    let hash = 101 + kind * 7 + (code ? 3 : 0)
+    for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0
+    this.hash = hash
+  }
+}
 
 class Context {
   // An old node is only reused where this is the same as where it was
@@ -204,9 +226,10 @@ class Context {
               // The terminators of the heredocs that were opened on the
               // current line, whose text starts on the next one.
               readonly heredocs: readonly string[],
+              readonly pod: PodBlock | null,
               hash = -1) {
     if (hash < 0) {
-      hash = quote ? quote.hash : 0
+      hash = (quote ? quote.hash : 0) ^ (pod ? pod.hash : 0)
       for (let terminator of heredocs) {
         hash = (hash * 31 + 17) | 0
         for (let i = 0; i < terminator.length; i++) hash = (hash * 31 + terminator.charCodeAt(i)) | 0
@@ -217,11 +240,15 @@ class Context {
     this.hash = hash
   }
   withMode(mode: Mode) {
-    return mode == this.mode ? this : new Context(mode, this.quote, this.heredocs, this.hash)
+    return mode == this.mode ? this : new Context(mode, this.quote, this.heredocs, this.pod, this.hash)
   }
   withHeredocs(heredocs: readonly string[]) {
-    return heredocs == this.heredocs ? this : new Context(this.mode, this.quote, heredocs)
+    return heredocs == this.heredocs ? this : new Context(this.mode, this.quote, heredocs, this.pod)
   }
+  withQuote(mode: Mode, quote: Quote | null, heredocs = this.heredocs) {
+    return new Context(mode, quote, heredocs, this.pod)
+  }
+  withPod(pod: PodBlock | null) { return new Context(this.mode, this.quote, this.heredocs, pod) }
 }
 
 // The mode after a token or a node, for those where the term settles
@@ -234,13 +261,8 @@ for (let term of [VariableName, AttributeName, SpecialVariable, operatorVariable
 for (let term of [Identifier, TypeName, smiley, declaredName, declaredMethodName, PackageName, RoutineName,
                   methodRoutineName, RegexName, EnumName, SubsetName, ConstantName])
   termModes.set(term, Mode.AfterName)
-// The `}` of "{...}" in a string does not take a subscript. A quote
-// that was not closed ends with its line, and a statement follows it.
-for (let term of [quoteContent, quoteClosedContent, Interpolation, quoteLineEnd, unclosedString])
-  termModes.set(term, Mode.Term)
-
-// The two nodes that are named StringLiteral.
-function isString(term: number) { return term == StringLiteral || term == unclosedString }
+// The `}` of "{...}" in a string does not take a subscript.
+for (let term of [quoteContent, Interpolation]) termModes.set(term, Mode.Term)
 
 // The mode after an operator, from its first three characters. `after`
 // is the mode before it.
@@ -274,7 +296,8 @@ function modeAfter(term: number, input: InputStream, offset: number, before: Mod
   return modeAfterChar(first)
 }
 
-const skippedTerms = new Set([LineComment, DocComment, BlockComment, Pod, Heredoc])
+const skippedTerms = new Set([LineComment, DocComment, BlockComment, Heredoc, Pod, podStart, podEnd, podEndDirective,
+                              podText, PodDirective, PodHeading, PodStrong, PodEmphasis, PodCode, PodLink, PodFormat])
 
 // The terminator that the quote at offset `at` names, when that quote
 // opens a heredoc: END for q:to/END/
@@ -307,20 +330,20 @@ function hasNewline(input: InputStream, from: number, to: number) {
 // and the text of a heredoc close the ones before them.
 function heredocsAfter(node: Tree, input: InputStream, before: readonly string[]) {
   // Most reused nodes are single tokens.
-  if (!node.children.length && !isString(node.type.id) && node.type.id != Heredoc) return before
+  if (!node.children.length && node.type.id != StringLiteral && node.type.id != Heredoc) return before
   let cursor = node.cursor(), found: {pos: number, terminator: string}[] = [], closedAt = -1
   // Goes over the node at the cursor from its end, and tells whether
   // the heredocs before some point in it are closed.
   function scan(): boolean {
     let type = cursor.type.id, {from, to} = cursor
     if (type == Heredoc) { closedAt = to; return true }
-    if (isString(type)) {
+    if (type == StringLiteral) {
       let terminator = heredocTerminator(input, from)
       if (terminator != null) found.push({pos: from, terminator})
     }
     if (!cursor.lastChild()) return false
     // Between the pieces of a string lies its text, not whitespace.
-    let gaps = !isString(type)
+    let gaps = type != StringLiteral
     for (let gapEnd = to;;) {
       if (gaps && hasNewline(input, cursor.to, gapEnd)) { closedAt = gapEnd; break }
       if (scan()) break
@@ -339,32 +362,42 @@ function heredocsAfter(node: Tree, input: InputStream, before: readonly string[]
   return closedAt < 0 ? before.concat(after) : after.length ? after : noHeredocs
 }
 
+// The last token in `node` that says what the mode after it is: one
+// that is not a comment or Pod, which leave the mode as it was. A node
+// that settles the mode by itself counts as a token. Null when the
+// node holds nothing but comments.
+function lastToken(node: SyntaxNode): SyntaxNode | null {
+  if (termModes.has(node.type.id) || !node.lastChild) return skippedTerms.has(node.type.id) ? null : node
+  for (let child: SyntaxNode | null = node.lastChild; child; child = child.prevSibling) {
+    let found = skippedTerms.has(child.type.id) ? null : lastToken(child)
+    if (found) return found
+  }
+  return null
+}
+
 export const trackContext = new ContextTracker<Context>({
-  start: new Context(Mode.Term, null, noHeredocs),
+  start: new Context(Mode.Term, null, noHeredocs, null),
   shift(context, term, _stack, input) {
     if (term == Heredoc) return context.withHeredocs(noHeredocs)
+    if (term == podStart) return context.withPod(readPodStart(input))
+    if (term == podEnd || term == podEndDirective) return context.withPod(null)
     if (skippedTerms.has(term)) return context
     switch (term) {
       case quoteStart: {
         let opening = wordListOpening(input, 0) || readOpening(input)
         if (!opening) return context
         let quote = new Quote(context.quote, opening.open, opening.close, opening.count, 0,
-                              opening.interpolates, opening.escapes, false)
-        return new Context(Mode.Term, quote, withHeredocAt(context.heredocs, input, 0))
+                              opening.interpolates, opening.escapes)
+        return context.withQuote(Mode.Term, quote, withHeredocAt(context.heredocs, input, 0))
       }
-      case quoteClosedContent:
-        return context.quote ? new Context(Mode.Term, context.quote.with(context.quote.depth, true), context.heredocs)
-          : context
       case quoteNestOpen: case quoteNestClose: {
         let quote = context.quote
         if (!quote) return context
         let depth = quote.depth + (term == quoteNestOpen ? 1 : -1)
-        return new Context(Mode.Term, quote.with(depth, quote.closed), context.heredocs)
+        return context.withQuote(Mode.Term, quote.withDepth(depth))
       }
-      case quoteEnd: case quoteLineEnd:
-        // After a quote that ended with its line, a new statement starts.
-        return new Context(term == quoteEnd ? Mode.AfterTerm : Mode.Term, context.quote && context.quote.parent,
-                           context.heredocs)
+      case quoteEnd:
+        return context.withQuote(Mode.AfterTerm, context.quote && context.quote.parent)
     }
     // The whitespace token has no term to go by. It is the only token
     // that starts with a space. A line break in it leaves the heredocs
@@ -382,35 +415,11 @@ export const trackContext = new ContextTracker<Context>({
     return term == Identifier || term == Interpolation ? context.withMode(termModes.get(term)!) : context
   },
   reuse(context, node, _stack, input) {
-    // Walk down to the last token, keeping its offset from the node's
-    // start, where the input is positioned. Stop at a node that settles
-    // the mode by itself.
-    let last: Tree | TreeBuffer = node, offset = 0
-    while (last instanceof Tree && last.children.length && !termModes.has(last.type.id)) {
-      offset += last.positions[last.children.length - 1]
-      last = last.children[last.children.length - 1]
-    }
-    let term
-    if (last instanceof Tree) {
-      term = last.type.id
-    } else {
-      // A buffer holds its nodes in pre-order, as type, start, end and
-      // the index after the node's last descendant.
-      let {buffer} = last, index = 0
-      for (let from = 0, to = buffer.length;;) {
-        index = from
-        while (buffer[index + 3] < to) index = buffer[index + 3]
-        from = index + 4
-        to = buffer[index + 3]
-        if (from == to || termModes.has(buffer[index])) break
-      }
-      term = buffer[index]
-      offset += buffer[index + 1]
-    }
     context = context.withHeredocs(heredocsAfter(node, input, context.heredocs))
-    if (skippedTerms.has(term)) return context
+    // The node's positions count from its start, where the input is.
+    let last = lastToken(node.topNode)
     // What comes before a trailing `++` in a reused node is a term.
-    return context.withMode(modeAfter(term, input, offset, Mode.AfterTerm))
+    return last ? context.withMode(modeAfter(last.type.id, input, last.from, Mode.AfterTerm)) : context
   },
   hash: context => context.hash
 })
@@ -481,50 +490,143 @@ function skipBlanks(input: InputStream) {
 // Skips blanks, and tells whether the rest of the line starts with `text`.
 function lineStartsWith(input: InputStream, text: string) {
   skipBlanks(input)
-  for (let i = 0; i < text.length; i++) if (input.peek(i) != text.charCodeAt(i)) return false
-  return !continuesName(input, text.length)
+  return startsWith(input, 0, text)
+}
+
+// Whether the text from offset `pos` starts with `text`, as a whole name.
+function startsWith(input: InputStream, pos: number, text: string) {
+  for (let i = 0; i < text.length; i++) if (input.peek(pos + i) != text.charCodeAt(i)) return false
+  return !continuesName(input, pos + text.length)
 }
 
 const podDirective = /^(begin|for|end|finish|head\d*|item\d*|para|code|input|output|defn|comment|table|pod|rakudoc|config|alias|nested|data|[A-Z]{2,})$/
 
-// A Pod block, from its `=directive` at the start of a line.
-//   =begin name ... =end name   delimited, can hold blocks of other names
-//   =finish                     the rest of the file
-//   =for name, =head1, ...      up to the next blank line
-export const podToken = new ExternalTokenizer(input => {
-  if (input.next != Ch.Equals || !isAsciiLetter(input.peek(1)) || !atLineStart(input)) return
+const podCodeBlock = /^(code|input|output)$/
+
+// The offset after the directive that starts at the current position,
+// as in `=begin` or `=head1`, or -1 when there is none.
+function podDirectiveEnd(input: InputStream) {
+  if (input.next != Ch.Equals || !isAsciiLetter(input.peek(1)) || !atLineStart(input)) return -1
   let end = 1
   while (isAsciiLetter(input.peek(end)) || isDigit(input.peek(end))) end++
   let directive = word(input, 1, end)
-  if (!podDirective.test(directive) || continuesName(input, end)) return
+  if (!podDirective.test(directive) || continuesName(input, end)) return -1
   // A semantic block such as =TITLE has to start in the first column.
   // An indented `=FOO + 1` continues an assignment.
-  if (directive.charCodeAt(0) <= Ch.Z && input.peek(-1) >= 0 && input.peek(-1) != Ch.Newline) return
-  input.advance(end)
-  if (directive == "finish") {
-    skipToEnd(input)
-  } else if (directive == "begin") {
-    skipBlanks(input)
-    let name = word(input, 0, Math.max(0, nameEnd(input, 0)))
-    for (;;) {
-      skipLine(input)
-      if (input.next < 0) break
-      input.advance()
-      if (!lineStartsWith(input, "=end")) continue
-      input.advance(4)
-      if (lineStartsWith(input, name)) { skipLine(input); break }
-    }
-  } else {
-    for (;;) {
-      skipLine(input)
-      if (input.next < 0) break
-      // Stop before a blank line or another directive.
-      let i = blanksEnd(input, 1), ch = input.peek(i)
-      if (ch == Ch.Newline || ch < 0 || ch == Ch.Equals && isAsciiLetter(input.peek(i + 1))) break
-      input.advance()
+  if (directive.charCodeAt(0) <= Ch.Z && input.peek(-1) >= 0 && input.peek(-1) != Ch.Newline) return -1
+  return end
+}
+
+// The offset after the name that goes with a directive which ends at
+// offset `end`: `=begin pod`, `=for comment`, `=end code`. The other
+// directives have none.
+function podNameEnd(input: InputStream, end: number) {
+  if (!/^(begin|for|end)$/.test(word(input, 1, end))) return end
+  let name = nameEnd(input, blanksEnd(input, end))
+  return name < 0 ? end : name
+}
+
+// The block that the directive at the current position starts.
+//   =begin name ... =end name   delimited, can hold blocks of other names
+//   =finish                     the rest of the file
+//   =for name, =head1, ...      up to the next blank line
+function readPodStart(input: InputStream) {
+  let end = podDirectiveEnd(input), directive = word(input, 1, end)
+  if (directive == "finish") return new PodBlock(PodKind.Finish, "", false)
+  let nameStart = blanksEnd(input, end), name = word(input, nameStart, Math.max(nameStart, nameEnd(input, nameStart)))
+  if (directive == "begin") return new PodBlock(PodKind.Delimited, name, podCodeBlock.test(name))
+  return new PodBlock(PodKind.Paragraph, "", podCodeBlock.test(directive == "for" ? name : directive))
+}
+
+// Whether the current position is right after a `=head` directive,
+// where the text of the heading starts.
+function atHeadingText(input: InputStream) {
+  let pos = -1
+  while (isDigit(input.peek(pos))) pos--
+  for (let i = 0; i < 5; i++) if (input.peek(pos - i) != "=head".charCodeAt(4 - i)) return false
+  for (pos -= 5; isBlank(input.peek(pos)); pos--) {}
+  return input.peek(pos) < 0 || input.peek(pos) == Ch.Newline
+}
+
+// Whether a formatting code starts at offset `pos`: B<, C<<, L«
+function isFormattingCode(input: InputStream, pos: number) {
+  let ch = input.peek(pos), after = input.peek(pos + 1), before = input.peek(pos - 1)
+  return ch >= Ch.A && ch <= Ch.Z && (after == Ch.Less || after == Ch.GuillemetOpen) &&
+    !isAsciiLetter(before) && !isDigit(before)
+}
+
+// The offset after the formatting code at the current position. When
+// the code is not closed in its paragraph, this is the negated offset
+// of the end of the text that was gone over to find that out.
+function formattingCodeEnd(input: InputStream) {
+  let open = input.peek(1), close = brackets[open], count = 1
+  while (open == Ch.Less && input.peek(1 + count) == open) count++
+  for (let pos = 1 + count, depth = 1;; pos++) {
+    let ch = input.peek(pos)
+    if (ch < 0) return -pos
+    if (ch == Ch.Newline) {
+      // A blank line or a directive ends the paragraph.
+      let next = blanksEnd(input, pos + 1), after = input.peek(next)
+      if (after < 0 || after == Ch.Newline || after == Ch.Equals && isAsciiLetter(input.peek(next + 1))) return -pos
+    } else if (ch == close && repeats(input, pos, close, count)) {
+      pos += count - 1
+      if (--depth == 0) return pos + 1
+    } else if (ch == open && count == 1) {
+      // C<a < b> is not closed by the first `>` when another `<` came before it.
+      depth++
     }
   }
-  input.acceptToken(Pod)
+}
+
+const formattingTerms: {[letter: number]: number} = {66: PodStrong, 73: PodEmphasis, 67: PodCode, 76: PodLink}
+
+// The pieces of a Pod block, which starts with a `=directive` at the
+// start of a line. What it is, and with that where it ends, is kept in
+// the context.
+export const podToken = new ExternalTokenizer((input, stack) => {
+  let {pod} = context(stack)
+  if (!pod) {
+    let end = podDirectiveEnd(input)
+    if (end > 0) input.acceptToken(podStart, podNameEnd(input, end))
+    return
+  }
+  let next = input.next
+  if (next < 0) return input.acceptToken(podEnd)
+  if (next == Ch.Newline && pod.kind == PodKind.Paragraph) {
+    // Ends before a blank line or another directive.
+    let pos = blanksEnd(input, 1), ch = input.peek(pos)
+    if (ch == Ch.Newline || ch < 0 || ch == Ch.Equals && isAsciiLetter(input.peek(pos + 1)))
+      return input.acceptToken(podEnd)
+  }
+  let directive = pod.kind == PodKind.Delimited ? podDirectiveEnd(input) : -1
+  if (directive > 0) {
+    if (directive == 4 && startsWith(input, 1, "end") && startsWith(input, blanksEnd(input, 4), pod.name)) {
+      skipLine(input)
+      return input.acceptToken(podEndDirective)
+    }
+    return input.acceptToken(PodDirective, podNameEnd(input, directive))
+  }
+  if (atHeadingText(input) && !isLineEnd(input, 0)) {
+    skipLine(input)
+    return input.acceptToken(PodHeading)
+  }
+  if (!pod.code && isFormattingCode(input, 0)) {
+    let end = formattingCodeEnd(input)
+    if (end > 0) return input.acceptToken(formattingTerms[next] || PodFormat, end)
+    // What looked like a code is text. The text that was gone over is
+    // made one token, so that no token has looked beyond its own end.
+    // A token that does keeps the tokens before it from being reused.
+    return input.acceptToken(podText, -end)
+  }
+  // Text, up to where one of the above may apply.
+  for (;;) {
+    input.advance()
+    let ch = input.next
+    if (ch < 0 || ch == Ch.Newline || !pod.code && isFormattingCode(input, 0)) break
+    // A directive can only follow the blanks at the start of a line.
+    if (ch == Ch.Equals && atLineStart(input)) break
+  }
+  input.acceptToken(podText)
 })
 
 // ---- Quotes ----
@@ -646,10 +748,9 @@ function readOpening(input: InputStream, at = 0): Opening | null {
 
 // The offset after the delimiter that closes a quote whose content
 // starts at `pos`, or -1 when it is not closed.
-function rawEnd(input: InputStream, pos: number, opening: Pick<Opening, "open" | "close" | "count" | "escapes">,
-                depth = 1) {
+function rawEnd(input: InputStream, pos: number, opening: Pick<Opening, "open" | "close" | "count" | "escapes">) {
   let {open, close, count} = opening
-  for (;;) {
+  for (let depth = 1;;) {
     let ch = input.peek(pos)
     if (ch < 0) return -1
     if (ch == Ch.Backslash && opening.escapes) pos += 2
@@ -756,6 +857,10 @@ function wordListEnd(input: InputStream, strict: boolean) {
   }
 }
 
+// The length up to which a <<...>> word list is read as a quote that
+// interpolates. See termToken.
+const maxInterpolatedWordList = 24
+
 // Whether every `{` between two offsets has its `}` there, and the
 // other way around.
 function hasBalancedBraces(input: InputStream, from: number, to: number) {
@@ -828,7 +933,12 @@ export const termToken = new ExternalTokenizer((input, stack) => {
       // by rules that count nested delimiters, escapes and the braces
       // of blocks. A list that those rules would end elsewhere stays
       // one token.
-      let opening = end > 0 ? wordListOpening(input, 0) : null
+      //
+      // Only a short list is read that way. Finding the end of the list
+      // means looking ahead from its opening token, and a token that
+      // looks more than 25 characters past its end keeps the parser
+      // from reusing the tokens before it. A longer list is one token.
+      let opening = end > 0 && end <= maxInterpolatedWordList ? wordListOpening(input, 0) : null
       if (opening && rawEnd(input, opening.start, opening) == end && hasBalancedBraces(input, opening.start, end))
         return input.acceptToken(quoteStart, opening.start)
     } else {
@@ -879,21 +989,9 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
     if (end > 0) return input.acceptToken(rawString, end)
   }
   let start = input.pos
-  // A quote that is not closed ends with its line, in an empty token.
-  // Whether it is closed is only looked into at its first line break:
-  // looking for the delimiter where the quote opens would make every
-  // string depend on the text up to its end, and a token that looks
-  // far ahead keeps the nodes around it from being reused. The token
-  // that crosses that line break tells the context that the quote is
-  // closed, so that the lines after it are not looked into again.
-  let found = false
-  let isClosed = () => quote.closed || found || (found = rawEnd(input, 0, quote, quote.depth + 1) >= 0)
   for (;;) {
     let next = input.next
-    if (next < 0 || next == Ch.Newline && !isClosed()) {
-      if (input.pos == start) return input.acceptToken(quoteLineEnd)
-      break
-    }
+    if (next < 0) break
     let atClose = next == close && repeats(input, 0, close, count)
     if (atClose || nests && next == open && repeats(input, 0, open, count)) {
       if (input.pos > start) break
@@ -901,11 +999,7 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
       return input.acceptToken(!atClose ? quoteNestOpen : quote.depth ? quoteNestClose : quoteEnd)
     }
     if (next == Ch.Backslash) {
-      // A backslash at the end of a line escapes the line break, which
-      // a quote that ends with the line does not go past.
-      let after = input.peek(1), lineBreak = after < 0 || after == Ch.Newline && !isClosed()
-      if (interpolates & Interpolate.Backslash && !lineBreak) break
-      if (lineBreak) { input.advance(); continue }
+      if (interpolates & Interpolate.Backslash) break
       // Still keeps a delimiter after it from closing the quote.
       if (quote.escapes && input.peek(1) >= 0) input.advance()
     } else if (next == Ch.Dollar) {
@@ -920,7 +1014,7 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
     }
     input.advance()
   }
-  if (input.pos > start) input.acceptToken(found ? quoteClosedContent : quoteContent)
+  if (input.pos > start) input.acceptToken(quoteContent)
 })
 
 // The text of a heredoc: the lines after the one that holds its opener,

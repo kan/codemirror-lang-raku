@@ -5,7 +5,7 @@ import {EditorState} from "@codemirror/state"
 import {CompletionContext} from "@codemirror/autocomplete"
 import {toggleBlockComment} from "@codemirror/commands"
 import {classHighlighter, highlightTree} from "@lezer/highlight"
-import {TreeFragment} from "@lezer/common"
+import {TreeFragment, Tree, NodeProp} from "@lezer/common"
 
 import * as assert from "assert"
 import * as fs from "fs"
@@ -79,7 +79,27 @@ describe("highlighting", () => {
       ["q:to/END/", "tok-string"],
       [";", "tok-punctuation"],
       ["\n  text\n  END", "tok-string"],
-      ["=begin pod\nx\n=end pod", "tok-comment"]
+      ["=begin pod", "tok-meta"],
+      ["\nx\n", "tok-comment"],
+      ["=end pod", "tok-meta"]
+    ])
+  })
+
+  it("styles the directives, headings and formatting codes of Pod", () => {
+    assert.deepStrictEqual(highlight("=begin pod\n=head1 Title\nSome B<bold> and C<code>, I<x> L<y> E<z>\n=end pod"), [
+      ["=begin pod", "tok-meta"],
+      ["\n", "tok-comment"],
+      ["=head1", "tok-meta"],
+      [" Title", "tok-comment tok-heading"],
+      ["\nSome ", "tok-comment"],
+      ["B<bold>", "tok-comment tok-strong"],
+      // The class highlighter has no class for monospace text.
+      [" and C<code>, ", "tok-comment"],
+      ["I<x>", "tok-comment tok-emphasis"],
+      [" ", "tok-comment"],
+      ["L<y>", "tok-comment tok-link"],
+      [" E<z>\n", "tok-comment"],
+      ["=end pod", "tok-meta"]
     ])
   })
 
@@ -128,6 +148,27 @@ describe("fixtures", () => {
         if (node.type.isError) errors.push(code.slice(0, node.from).split("\n").length)
       }})
       assert.deepStrictEqual(errors, [], "error nodes on lines " + errors.join(", "))
+    })
+  }
+})
+
+// A token that looks more than 25 characters past its own end makes the
+// parser record that, and keeps it from reusing the tokens before that
+// point after an edit. Nothing in ordinary code should do so.
+describe("lookahead", () => {
+  let dir = path.join(caseDir, "fixtures")
+  for (let file of fs.readdirSync(dir)) {
+    it(`stays close to the tokens in ${file}`, () => {
+      // Repeated, because the record ends up on the nodes that group
+      // the top-level tokens of a long document.
+      let code = fs.readFileSync(path.join(dir, file), "utf8").replace(/^=finish[^]*/m, "").repeat(8), found = []
+      let walk = (node, start) => {
+        if (!(node instanceof Tree)) return
+        if (node.prop(NodeProp.lookAhead)) found.push(code.slice(0, start).split("\n").length)
+        node.children.forEach((child, i) => walk(child, start + node.positions[i]))
+      }
+      walk(rakuLanguage.parser.parse(code), 0)
+      assert.deepStrictEqual(found, [], "nodes that record a lookahead start on lines " + found.join(", "))
     })
   }
 })
@@ -322,6 +363,11 @@ say $x; # ends in +
 say 4;
 sub g { }
 .say;`))
+
+  it("does not take a Pod block for part of a statement", () => {
+    assert.deepStrictEqual(indentation("my $x = 1;\n=begin pod\ntext\n=end pod\nfor @a { }\n=head1 Title\n\n.say;"),
+                           [0, 0, null, null, 0, 0, 0, 0])
+  })
 
   it("does not indent the pairs of a hash in braces", keeps(`
 my %h = {

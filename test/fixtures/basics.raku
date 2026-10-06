@@ -32,6 +32,12 @@ role Countable {
     method default { 0 }
 }
 
+my $ratio = Item.new(:name<a>).count
+=begin comment
+A Pod block in the middle of a statement.
+=end comment
+/ 2 / 3;
+
 enum Status;
 subset Positive of Int where * > 0;
 constant MAX-ITEMS = 1_000;
