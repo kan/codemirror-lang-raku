@@ -19,7 +19,11 @@ export const rakuLanguage = LRLanguage.define({
       }),
       foldNodeProp.add({
         "Block Parens Brackets": foldInside,
-        BlockComment(tree) { return {from: tree.from + 2, to: tree.to} }
+        BlockComment(tree) { return {from: tree.from + 2, to: tree.to} },
+        // Keep the first line, which holds the directive, visible.
+        Pod(tree, state) { return {from: state.doc.lineAt(tree.from).to, to: tree.to} },
+        // A heredoc starts with the line break before its first line.
+        Heredoc(tree) { return {from: tree.from, to: tree.to} }
       }),
       styleTags({
         "my our has state temp let constant anon augment supersede unit multi proto only": t.definitionKeyword,
@@ -47,7 +51,9 @@ export const rakuLanguage = LRLanguage.define({
         PairKey: t.attributeName,
         Number: t.number,
         Version: t.literal,
-        StringLiteral: t.string,
+        "StringLiteral Heredoc": t.string,
+        Regex: t.regexp,
+        Pod: t.docComment,
         Escape: t.escape,
         "Interpolation/{ Interpolation/}": t.special(t.brace),
         LineComment: t.lineComment,

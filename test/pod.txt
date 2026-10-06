@@ -1,0 +1,104 @@
+# Delimited block
+
+=begin pod
+The users' data { is not code
+=end pod
+say 1;
+
+==>
+
+Program(Pod, Identifier, Number)
+
+# Nested blocks of other kinds
+
+=begin pod
+=head1 Title
+=begin code
+say 'x';
+=end code
+=end pod
+say 1;
+
+==>
+
+Program(Pod, Identifier, Number)
+
+# Abbreviated block ends at a blank line
+
+=head1 A title
+that continues here
+
+say 1;
+
+==>
+
+Program(Pod, Identifier, Number)
+
+# Paragraph block
+
+=for comment
+ignored text
+
+say 1;
+
+==>
+
+Program(Pod, Identifier, Number)
+
+# Indented pod
+
+class A {
+    =begin pod
+    text
+    =end pod
+    method m { }
+}
+
+==>
+
+Program(PackageDeclaration(class, PackageName,
+  Block(Pod, RoutineDeclaration(method, RoutineName, Block))))
+
+# Finish block runs to the end
+
+say 1;
+=finish
+anything { goes ' here
+
+==>
+
+Program(Identifier, Number, Pod)
+
+# An assignment at the start of a line is not pod
+
+my $x
+    = 1;
+my $y
+    =foo;
+my $z
+    =BAR + 1;
+
+==>
+
+Program(my, VariableName, Operator, Number, my, VariableName, Operator, Identifier,
+  my, VariableName, Operator, TypeName, Operator, Number)
+
+# Semantic blocks
+
+=TITLE My module
+=AUTHOR Somebody
+
+say 1;
+
+==>
+
+Program(Pod, Pod, Identifier, Number)
+
+# Unclosed block runs to the end
+
+=begin pod
+never closed
+
+==>
+
+Program(Pod)

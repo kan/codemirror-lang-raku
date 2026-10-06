@@ -71,12 +71,12 @@ Program(VariableName, and, VariableName, or, not, VariableName,
 
 # Words that are operators only in operator position stay names
 
-x => 1, max(1, 2), 'ab' x 3
+x => 1, max(1, 2), min 3, 4
 
 ==>
 
 Program(Identifier, Operator, Number, Identifier, Parens(Number, Number),
-  StringLiteral, Identifier, Number)
+  Identifier, Number, Number)
 
 # A hyphenated word is not a keyword
 

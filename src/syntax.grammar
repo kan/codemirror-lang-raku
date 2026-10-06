@@ -3,14 +3,17 @@
 // and recognizes the heads of declarations. That keeps the tree
 // usable on incomplete or unsupported code.
 
+@context trackContext from "./tokens"
+
 @top Program { element* }
 
-@skip { whitespace | LineComment | DocComment | BlockComment }
+@skip { whitespace | LineComment | DocComment | BlockComment | Pod | Heredoc }
 
 element { nonBlock | Block | ";" }
 
 // Everything that can appear between a declarator and its body.
 nonBlock {
+  radixNumber |
   Parens |
   Brackets |
   PackageDeclaration |
@@ -28,9 +31,11 @@ nonBlock {
   Number |
   Version |
   StringLiteral |
+  Regex |
   PairKey |
   keyword |
   Operator |
+  wordOperator |
   "," |
   ":" |
   "." |
@@ -57,8 +62,12 @@ RoutineDeclaration {
 
 RegexDeclaration {
   (kw<"token"> | kw<"rule"> | kw<"regex">)
-  RegexName? declarationTail
+  RegexName? nonBlock* (RegexBlock | ";")
 }
+
+// The body of a regex declaration is in the regex language, and is
+// read as one token.
+RegexBlock[@name=Block] { "{" regexBody? "}" }
 
 EnumDeclaration { kw<"enum"> EnumName? }
 SubsetDeclaration { kw<"subset"> SubsetName? }
@@ -75,19 +84,22 @@ ConstantName { declaredName }
 
 MethodCall { methodDot MethodName }
 
-Identifier { identifier }
+Identifier { identifier | fatArrowKey }
 // A capitalized name is taken to be a type, and may carry a type
 // smiley: Int:D, Str:U, Any:_
 TypeName { capIdentifier smiley? }
 
 @skip {} {
   StringLiteral {
-    singleQuoted |
-    quote (
-      stringContent | Escape | Interpolation |
+    // A quote that does not interpolate is one token.
+    rawString |
+    quoteStart (
+      quoteContent | quoteNestOpen | quoteNestClose | Escape | Interpolation |
       // A `$` that does not start a variable is a lone sigil.
-      VariableName | AttributeName | SpecialVariable | sigil
-    )* quote
+      VariableName | AttributeName | SpecialVariable | sigil |
+      // After a variable: "@a[0]", "&f(1)", "%h<k>", "$o.m()"
+      Brackets | Parens | rawString | MethodCall
+    )* quoteEnd
   }
 }
 
@@ -114,8 +126,8 @@ keyword {
 
   kw<"and"> | kw<"or"> | kw<"not"> | kw<"xor"> | kw<"so"> |
   kw<"andthen"> | kw<"orelse"> | kw<"notandthen"> |
-  // `x`, `xx`, `min` and `max` are left out: without knowing whether a
-  // word is in operator position, they are more often ordinary names.
+  // `x`, `xx`, `min` and `max` are not here: they are operators only
+  // where an operator is expected, which termToken decides.
   kw<"div"> | kw<"mod"> | kw<"gcd"> | kw<"lcm"> |
   kw<"eq"> | kw<"ne"> | kw<"lt"> | kw<"gt"> | kw<"le"> | kw<"ge"> |
   kw<"cmp"> | kw<"leg"> | kw<"eqv"> | kw<"but"> |
@@ -133,14 +145,22 @@ keyword {
 kw<term> { @specialize[@name={term}]<identifier, term> }
 capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 
+// External tokenizers are tried in this order, before the tokens below.
 @external tokens blockComment from "./tokens" { BlockComment }
+@external tokens podToken from "./tokens" { Pod }
+@external tokens heredocToken from "./tokens" { Heredoc }
 @external tokens methodDotToken from "./tokens" { methodDot[@name="."] }
 // Names in positions where a word is never a keyword: `method next`, `.default`.
 @external tokens nameToken from "./tokens" { MethodName, declaredName, declaredMethodName }
 // These two need to see that no identifier character follows.
 @external tokens smileyToken from "./tokens" { smiley }
 @external tokens versionToken from "./tokens" { Version }
-@external tokens stringContentToken from "./tokens" { stringContent }
+@external tokens regexBodyToken from "./tokens" { regexBody[@name=Regex] }
+@external tokens quoteToken from "./tokens" { quoteContent, quoteNestOpen, quoteNestClose, quoteEnd }
+// Tokens that depend on whether a term or an operator is expected.
+@external tokens termToken from "./tokens" {
+  rawString, quoteStart, Regex, fatArrowKey, wordOperator[@name=Operator]
+}
 
 @tokens {
   whitespace { @whitespace+ }
@@ -172,7 +192,7 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
   // first, so that it wins whenever it matches.
   @precedence {
     AttributeName, SpecialVariable, VariableName,
-    PairKey, Operator, sigil, ":", "."
+    radixNumber, PairKey, Operator, sigil, ":", "."
   }
 
   sigilChar { $[$@%&] }
@@ -190,9 +210,9 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
     "0" $[dD] $[0-9_]+
   }
 
-  singleQuoted { "'" (!['\\] | "\\" _)* "'" }
-  // Not a node of its own, so that it is styled as part of the string.
-  quote { '"' }
+  // :16<FF>
+  radixNumber[@name=Number] { ":" @digit+ "<" $[0-9a-zA-Z_.]+ ">" }
+
   Escape { "\\" _ }
 
   // ASCII operator characters, « » × ÷ …, and the mathematical operators block.
@@ -202,10 +222,7 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
     // `%` and `&` are also sigils. Keeping them out of operator runs lets
     // `*%opts` and `|&code` end in a variable.
     "%" "%"? "="? | "&" "&"? "="? |
-    ".." "."? "^"? | ".=" | "::"? ":=" |
-    // A backslashed bracket or quote, as found in regexes, does not nest.
-    // A stopgap until regexes are tokenized as such.
-    "\\" $[{}\[\]"'#]
+    ".." "."? "^"? | ".=" | "::"? ":="
   }
 
   "{" "}" "(" ")" "[" "]"

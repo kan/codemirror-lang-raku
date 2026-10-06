@@ -1,0 +1,118 @@
+# Word operators in operator position
+
+'ab' x 3; @a xx 2; $a min $b; $a max $b
+
+==>
+
+Program(StringLiteral, Operator, Number,
+  VariableName, Operator, Number,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName)
+
+# The same words in term position
+
+x => 1; max(1, 2); min 1, 2; my \x = 1
+
+==>
+
+Program(Identifier, Operator, Number, Identifier, Parens(Number, Number),
+  Identifier, Number, Number, my, Operator, Identifier, Operator, Number)
+
+# Zip, cross and reverse meta operators
+
+@a Z @b; @a X @b; @a Z+ @b; @a X~ @b; $a R- $b; @a Z=> @b
+
+==>
+
+Program(VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName)
+
+# Capitalized names are not meta operators
+
+X::AdHoc.new; Z-index; my X $x; R.new
+
+==>
+
+Program(TypeName, MethodCall(MethodName), TypeName, my, TypeName, VariableName,
+  TypeName, MethodCall(MethodName))
+
+# Reduction and hyper operators
+
+[+] @a; [*] 1..5; [<] @a; @a »+« @b; @a >>+<< @b; @a».say; @a>>.say
+
+==>
+
+Program(Brackets(Operator), VariableName,
+  Brackets(Operator), Number, Operator, Number,
+  Brackets(Operator), VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, MethodCall(MethodName),
+  VariableName, Operator, MethodCall(MethodName))
+
+# Modulo and junctions next to sigils
+
+$a%b; $a % %h; $a&b; f %h; say %h; $a %% $b
+
+==>
+
+Program(VariableName, Operator, Identifier,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, Identifier,
+  Identifier, VariableName,
+  Identifier, VariableName,
+  VariableName, Operator, VariableName)
+
+# A hash or code variable after its type
+
+my Int %h; my Array[Int] %g; my Str:D &f = &g; sub f(Str %h, Callable &cb) { }
+
+==>
+
+Program(my, TypeName, VariableName, my, TypeName, Brackets(TypeName), VariableName,
+  my, TypeName, VariableName, Operator, VariableName,
+  RoutineDeclaration(sub, RoutineName,
+    Parens(TypeName, VariableName, TypeName, VariableName), Block))
+
+# Division after a postfix operator or a radix number
+
+%c{$w}++ / 2; 3 / 4; $i-- / 2; 3 / 4; :16<FF> / 2; 3 / 4
+
+==>
+
+Program(VariableName, Block(VariableName), Operator, Operator, Number, Number, Operator, Number,
+  VariableName, Operator, Operator, Number, Number, Operator, Number,
+  Number, Operator, Number, Number, Operator, Number)
+
+# Division after a term and a wide space
+
+say $x　/ 2; 3 / 4
+
+==>
+
+Program(Identifier, VariableName, Operator, Number, Number, Operator, Number)
+
+# Operator declarations
+
+sub infix:<+++>($a, $b) { }
+multi sub prefix:«±»($x) { }
+sub postfix:<!>($n) { }
+
+==>
+
+Program(
+  RoutineDeclaration(sub, RoutineName, Parens(VariableName, VariableName), Block),
+  multi, RoutineDeclaration(sub, RoutineName, Parens(VariableName), Block),
+  RoutineDeclaration(sub, RoutineName, Parens(VariableName), Block))
+
+# Radix literals
+
+:16<FF> :2<1010> :8<17>
+
+==>
+
+Program(Number, Number, Number)

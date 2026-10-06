@@ -147,9 +147,9 @@ grammar G {
 ==>
 
 Program(PackageDeclaration(grammar, PackageName, Block(
-  RegexDeclaration(token, RegexName, Block),
-  RegexDeclaration(rule, RegexName, Block),
-  RegexDeclaration(regex, RegexName, Block))))
+  RegexDeclaration(token, RegexName, Block(Regex)),
+  RegexDeclaration(rule, RegexName, Block(Regex)),
+  RegexDeclaration(regex, RegexName, Block(Regex)))))
 
 # Nested declarations
 

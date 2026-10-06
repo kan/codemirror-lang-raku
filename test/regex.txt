@@ -1,0 +1,161 @@
+# Bare regex in term position
+
+if $x ~~ /foo/ { }
+my $r = / \d+ /;
+when /bar/ { }
+
+==>
+
+Program(if, VariableName, Operator, Regex, Block,
+  my, VariableName, Operator, Regex,
+  when, Regex, Block)
+
+# Division is not a regex
+
+$a / $b; 10 / 2 / 5; f() / 2; @a[0] / 2; $x.elems / 2; %h<a> / 2; $a // $b; $a /= 2
+
+==>
+
+Program(VariableName, Operator, VariableName,
+  Number, Operator, Number, Operator, Number,
+  Identifier, Parens, Operator, Number,
+  VariableName, Brackets(Number), Operator, Number,
+  VariableName, MethodCall(MethodName), Operator, Number,
+  VariableName, StringLiteral, Operator, Number,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, Number)
+
+# After a name, spacing decides
+
+say /foo/; pi / 2; time/2; split /,/, $s; * / 2
+
+==>
+
+Program(Identifier, Regex, Identifier, Operator, Number,
+  Identifier, Operator, Number,
+  Identifier, Regex, VariableName,
+  Operator, Operator, Number)
+
+# After a closing brace, a line break decides
+
+if $a { 1 }
+/foo/.say;
+{ 2 } / 3
+
+==>
+
+Program(if, VariableName, Block(Number), Regex, MethodCall(MethodName),
+  Block(Number), Operator, Number)
+
+# Slashes inside a regex
+
+/ a \/ b /; / <[/]> /; / '/' /; / "/" /; / { 1 / 2 } /; 1
+
+==>
+
+Program(Regex, Regex, Regex, Regex, Regex, Number)
+
+# Combined character classes
+
+token t { <+[a..z]-[}]> x }; / <+[a..z] - [/]> /; 1
+
+==>
+
+Program(RegexDeclaration(token, RegexName, Block(Regex)), Regex, Number)
+
+# rx and m
+
+rx/foo/; m/bar/; rx{ a b }; m[c]; m:g:i/d/; rx:P5/e/; m!f!
+
+==>
+
+Program(Regex, Regex, Regex, Regex, Regex, Regex, Regex)
+
+# Substitution and transliteration
+
+s/a/b/; s:g/a/b/; S/a/b/; tr/a..z/A..Z/; s{a} = 'b'; s[a] = "b"; 1
+
+==>
+
+Program(Regex, Regex, Regex, Regex,
+  Regex, Operator, StringLiteral, Regex, Operator, StringLiteral, Number)
+
+# Words that are not regex prefixes
+
+m(1); s => 1; $m / 2; .s; rxx/1/; my $s = 1; method m { }
+
+==>
+
+Program(Identifier, Parens(Number), Identifier, Operator, Number,
+  VariableName, Operator, Number, MethodCall(MethodName),
+  Identifier, Operator, Number, Operator,
+  my, VariableName, Operator, Number,
+  RoutineDeclaration(method, RoutineName, Block))
+
+# Multi-line regex with comments
+
+my $r = rx/
+  \d+   # digits / not the end
+  '/'
+/;
+1
+
+==>
+
+Program(my, VariableName, Operator, Regex, Number)
+
+# Regex declaration bodies
+
+grammar G {
+    token TOP { <a> | '}' | \} | <[}]> }
+    rule b { x { make 1 } y }
+    regex c { "{" }
+    token d { }
+}
+say 1;
+
+==>
+
+Program(PackageDeclaration(grammar, PackageName, Block(
+  RegexDeclaration(token, RegexName, Block(Regex)),
+  RegexDeclaration(rule, RegexName, Block(Regex)),
+  RegexDeclaration(regex, RegexName, Block(Regex)),
+  RegexDeclaration(token, RegexName, Block(Regex)))),
+  Identifier, Number)
+
+# Regex declaration with a signature and adverbs
+
+token term:sym<number> { \d+ }
+token infix:«<=» { <sym> }
+regex r($x) { $x }
+my token t { a }
+
+==>
+
+Program(
+  RegexDeclaration(token, RegexName, Block(Regex)),
+  RegexDeclaration(token, RegexName, Block(Regex)),
+  RegexDeclaration(regex, RegexName, Parens(VariableName), Block(Regex)),
+  my, RegexDeclaration(token, RegexName, Block(Regex)))
+
+# A declarator used as a key is not a declaration
+
+my %h = token => 1, class => 'x', sub => { 2 };
+say %h<class>;
+
+==>
+
+Program(my, VariableName, Operator, Identifier, Operator, Number,
+  Identifier, Operator, StringLiteral,
+  Identifier, Operator, Block(Number),
+  Identifier, VariableName, StringLiteral)
+
+# Unclosed regex
+
+my $r = /never closed;
+say 1;
+
+==>
+
+Program(my, VariableName, Operator, Operator, Identifier, Identifier,
+  Identifier, Number)

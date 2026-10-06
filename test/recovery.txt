@@ -35,20 +35,49 @@ Program(⚠, Identifier, Identifier, Number)
 # Unclosed single-quoted string runs to the next quote
 
 'oops
-say 'x';
+say 'y';
 
 ==>
 
 Program(StringLiteral, Identifier, ⚠)
 
-# Backslashed brackets and quotes do not nest
+# Unclosed regex body runs to the end
 
-token brace { \{ \" \' \[ } say 1;
+token t { a
+say 1;
 
 ==>
 
-Program(RegexDeclaration(token, RegexName,
-  Block(Operator, Operator, Operator, Operator)), Identifier, Number)
+Program(RegexDeclaration(token, RegexName, Block(Regex, ⚠)))
+
+# Unclosed quote word is not a quote
+
+my $x = q{ never closed;
+say 1;
+
+==>
+
+Program(my, VariableName, Operator, Identifier,
+  Block(Identifier, Identifier, Identifier, Number, ⚠))
+
+# Unclosed word list is a less-than
+
+my @a = <a b c;
+say 1;
+
+==>
+
+Program(my, VariableName, Operator, Operator, Identifier, Identifier, Identifier,
+  Identifier, Number)
+
+# Unclosed interpolating quote
+
+say qq[ a $b
+say 1;
+
+==>
+
+Program(Identifier, StringLiteral(VariableName, ⚠))
 
 # Unclosed double-quoted string
 

@@ -1,6 +1,6 @@
 # Sigils
 
-$scalar @array %hash &code
+$scalar, @array, %hash, &code
 
 ==>
 
@@ -33,7 +33,7 @@ Program(VariableName, VariableName)
 
 # Special variables
 
-$_ $/ $! $0 $12 @_ %_
+$_, $/, $!, $0, $12, @_, %_
 
 ==>
 

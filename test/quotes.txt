@@ -1,0 +1,274 @@
+# q with various delimiters
+
+q{a}, q[b], Q[c], q<d>, q/e/, q!f!, q|g|, Q{h}
+
+==>
+
+Program(StringLiteral, StringLiteral, StringLiteral, StringLiteral,
+  StringLiteral, StringLiteral, StringLiteral, StringLiteral)
+
+# Nested and repeated delimiters
+
+q{a {b} c}, q[[a ] b]], q「x」, 「y」
+
+==>
+
+Program(StringLiteral, StringLiteral, StringLiteral, StringLiteral)
+
+# q does not interpolate
+
+q{$a @b[] {c}}, 1
+
+==>
+
+Program(StringLiteral, Number)
+
+# Escaped delimiters
+
+q/a\/b/, 'it\'s', q{a\}b}, Q{a\}, 1
+
+==>
+
+Program(StringLiteral, StringLiteral, StringLiteral, StringLiteral, Number)
+
+# qq interpolates
+
+qq[a $b {$c} \n], qq{$x}, qq/$y/
+
+==>
+
+Program(
+  StringLiteral(VariableName, Interpolation(VariableName), Escape),
+  StringLiteral(VariableName),
+  StringLiteral(VariableName))
+
+# Nested delimiters in qq
+
+qq[a [$b] c], qq{a {$b} c}, 1
+
+==>
+
+Program(StringLiteral(VariableName), StringLiteral(VariableName), Number)
+
+# Adverbs and short forms
+
+qw<a b>, qww<a 'b c'>, qx{ls}, qqx{ls $dir}, q:w/a b/, qq:x/ls/, Q:b/x/
+
+==>
+
+Program(StringLiteral, StringLiteral, StringLiteral, StringLiteral(VariableName),
+  StringLiteral, StringLiteral, StringLiteral)
+
+# A call or a key is not a quote
+
+q(1); q => 1; qq.foo; quote{1}; $q{a}
+
+==>
+
+Program(Identifier, Parens(Number), Identifier, Operator, Number,
+  Identifier, MethodCall(MethodName), Identifier, Block(Number),
+  VariableName, Block(Identifier))
+
+# Smart quotes
+
+“a $b”, ‘c $d’
+
+==>
+
+Program(StringLiteral(VariableName), StringLiteral)
+
+# Word lists
+
+my @a = <a b c>; my @b = < d e >; say <f g>; for <h i> { }
+
+==>
+
+Program(my, VariableName, Operator, StringLiteral,
+  my, VariableName, Operator, StringLiteral,
+  Identifier, StringLiteral,
+  for, StringLiteral, Block)
+
+# Word lists with double angles
+
+<<a $b>>, «c d», (<e>, <f>)
+
+==>
+
+Program(StringLiteral, StringLiteral, Parens(StringLiteral, StringLiteral))
+
+# Less-than is not a word list
+
+$a < $b; $a <= $b; $a <=> $b; f() < 3; @a[0] < 3; $x.elems < 3 and $y > 2
+
+==>
+
+Program(VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  Identifier, Parens, Operator, Number,
+  VariableName, Brackets(Number), Operator, Number,
+  VariableName, MethodCall(MethodName), Operator, Number, and,
+  VariableName, Operator, Number)
+
+# Less-than after a name or a whatever star
+
+elems < 3; * < 3; $i++ < 3; [<] @a; 1 < 2
+
+==>
+
+Program(Identifier, Operator, Number, Operator, Operator, Number,
+  VariableName, Operator, Operator, Number,
+  Brackets(Operator), VariableName, Number, Operator, Number)
+
+# Angle subscripts
+
+%h<key>; $x<a b>; $/<name>; $<name>; %h<a><b>; $a<$b; $a<5 && $b>3
+
+==>
+
+Program(VariableName, StringLiteral, VariableName, StringLiteral,
+  VariableName, StringLiteral, StringLiteral,
+  VariableName, StringLiteral, StringLiteral,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, Number, Operator, VariableName, Operator, Number)
+
+# Enum with a word list
+
+enum Color <red green blue>;
+
+==>
+
+Program(EnumDeclaration(enum, EnumName), StringLiteral)
+
+# Heredoc
+
+my $x = q:to/END/;
+  body $not @interpolated
+  END
+say 1;
+
+==>
+
+Program(my, VariableName, Operator, StringLiteral, Heredoc, Identifier, Number)
+
+# Heredoc with code after the opener
+
+foo(qq:to<EOT>, 2); # comment
+text
+EOT
+bar;
+
+==>
+
+Program(Identifier, Parens(StringLiteral, Number), LineComment, Heredoc, Identifier)
+
+# Two heredocs on one line
+
+say q:to/A/, q:to/B/;
+first
+A
+second
+B
+say 2;
+
+==>
+
+Program(Identifier, StringLiteral, StringLiteral, Heredoc, Identifier, Number)
+
+# Heredoc with the long adverb
+
+say q:heredoc/END/;
+text
+END
+
+==>
+
+Program(Identifier, StringLiteral, Heredoc)
+
+# Without a terminator, the text is not a heredoc
+
+say q:to/END/;
+never closed
+
+==>
+
+Program(Identifier, StringLiteral, Identifier, Identifier)
+
+# A heredoc opener in a comment
+
+# say q:to/END/;
+say 1;
+END
+
+==>
+
+Program(LineComment, Identifier, Number, END)
+
+# A name that is spelled like a quote word
+
+given $s { when S { say 1 } }; multi q { 1 }; multi m ($x) { }
+
+==>
+
+Program(given, VariableName, Block(when, TypeName, Block(Identifier, Number)),
+  multi, Identifier, Block(Number),
+  multi, Identifier, Parens(VariableName), Block)
+
+# Word lists with symbols
+
+my @ops = <+ - * / ( )>; my @b = <a; b>; %h<a+b> / 2; 3 / 4
+
+==>
+
+Program(my, VariableName, Operator, StringLiteral,
+  my, VariableName, Operator, StringLiteral,
+  VariableName, StringLiteral, Operator, Number, Number, Operator, Number)
+
+# A pointy block with a rw parameter
+
+for @a <-> $x { }
+
+==>
+
+Program(for, VariableName, Operator, VariableName, Block)
+
+# Array, hash and call interpolation
+
+"@a[0] %h{'k'} %h<k> &f(1) @a[] $x[1][2] $o.m() $o.m(1).n()"
+
+==>
+
+Program(StringLiteral(
+  VariableName, Brackets(Number),
+  VariableName, Interpolation(StringLiteral),
+  VariableName,
+  VariableName, Parens(Number),
+  VariableName, Brackets,
+  VariableName, Brackets(Number), Brackets(Number),
+  VariableName, MethodCall(MethodName), Parens,
+  VariableName, MethodCall(MethodName), Parens(Number), MethodCall(MethodName), Parens))
+
+# Sigils that do not interpolate
+
+"me@example.com 50% a & b @a %h &f $x.y $x (z) $x. [$x] <b>$x</b>"
+
+==>
+
+Program(StringLiteral(VariableName, VariableName, VariableName, VariableName, VariableName))
+
+# A string inside an interpolation
+
+"a {"b {"c"} d"} e" 1
+
+==>
+
+Program(StringLiteral(Interpolation(StringLiteral(Interpolation(StringLiteral)))), Number)
+
+# A string as a subscript in a string
+
+"$h{"k"} and @a["i"]"
+
+==>
+
+Program(StringLiteral(VariableName, Interpolation(StringLiteral),
+  VariableName, Brackets(StringLiteral)))

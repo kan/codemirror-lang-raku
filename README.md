@@ -5,9 +5,13 @@
 indentation and code folding, built on a [Lezer](https://lezer.codemirror.net/)
 grammar.
 
-> **Status: early development.** The package is not on npm yet. Comments,
-> simple strings, numbers, keywords, variables, blocks and declarations are
-> covered. See [Known limitations](#known-limitations) for what is missing.
+> **Status: early development.** The package is not on npm yet. See
+> [Known limitations](#known-limitations) for what is missing.
+
+Covered so far: comments and Pod, quotes of all kinds (`'…'`, `"…"`, `q` /
+`qq` / `Q` with any delimiter, heredocs, `<word lists>`) with interpolation,
+regexes, numbers, variables with sigils and twigils, keywords, operators,
+blocks and declarations.
 
 ## Usage
 
@@ -62,48 +66,58 @@ on incomplete code.
 |---|---|
 | `PackageDeclaration` | `class`, `role`, `grammar`, `module`, `package`, with a `PackageName` child, up to the body `Block` or the `;` of a `unit` declaration |
 | `RoutineDeclaration` | `sub`, `method`, `submethod`, with a `RoutineName` child (absent for anonymous routines), up to the body `Block` |
-| `RegexDeclaration` | `token`, `rule`, `regex`, with a `RegexName` child, up to the body `Block` |
+| `RegexDeclaration` | `token`, `rule`, `regex`, with a `RegexName` child, up to the body `Block`, which holds one `Regex` |
 | `EnumDeclaration`, `SubsetDeclaration`, `ConstantDeclaration` | The declarator and its `EnumName`, `SubsetName` or `ConstantName` |
 | `Block`, `Parens`, `Brackets` | `{ }`, `( )`, `[ ]` |
 | `VariableName`, `AttributeName`, `SpecialVariable` | `$x` / `$^a`, `$!x` / `$.x`, `$*x` / `$?x` |
-| `StringLiteral` | Quoted strings, with `Escape`, `Interpolation` and variable children |
-| `LineComment`, `DocComment`, `BlockComment` | `#`, `#|` / `#=`, `` #`( ) `` |
+| `StringLiteral` | A quote of any kind. One that interpolates has `Escape`, `Interpolation`, variable, `Brackets`, `Parens` and `MethodCall` children |
+| `Heredoc` | The text of a heredoc, from the line after its `q:to/END/` opener through its terminator. The opener is a `StringLiteral` |
+| `Regex` | `/…/`, `rx//`, `m//`, `s///`, `tr///`, or the body of a regex declaration |
+| `LineComment`, `DocComment`, `BlockComment`, `Pod` | `#`, `#|` / `#=`, `` #`( ) ``, `=begin` … `=end` and the other Pod blocks |
 
 Each declarator keyword is a child node named after the keyword (`class`,
 `sub`, `token`, …).
 
 ## Known limitations
 
-Not supported yet. Such code is still tokenized, but may be highlighted
-wrongly:
+Not supported yet:
 
-- Quote constructs other than `'…'` and `"…"`: `q` / `qq` / `Q` with
-  arbitrary delimiters and adverbs, heredocs (`q:to`), `「…」`, `<a b c>`
-  word lists
-- Interpolation of `@array[]`, `%hash{}`, `&call()` and method calls
-  (`"$obj.method()"`) in strings
-- Regexes: `/…/`, `rx//`, `m//`, `s///`, `tr///`, and the bodies of
-  `token` / `rule` / `regex` declarations. A quote or bracket inside a
-  regex is read as code, so it can open a string or a block that swallows
-  the code after it (`\{`, `\"` and the like are safe)
-- Pod (`=begin` … `=end`, `=head1`, …). An apostrophe in Pod text starts
-  a string that runs to the next apostrophe
-- The word operators `x`, `xx`, `min` and `max` are not highlighted as
-  operators
-- Meta operators as such (`[+]`, `Z+`, `X~`, `R-`), and user-defined
-  operators (`infix:<+++>`)
-- Radix literals such as `:16<FF>`
-- `multi` and `proto` declarations without `sub` or `method`
+- Nothing is highlighted inside a regex. A regex literal, and the body of
+  a `token` / `rule` / `regex` declaration, is a single `Regex` token,
+  including any code blocks in it
+- Nothing is highlighted inside a heredoc, a `<<…>>` / `«…»` word list or
+  a Pod block: no interpolation, no Pod formatting codes
+- Only the `qq` forms interpolate. Adverbs that switch interpolation on
+  or off (`q:c`, `q:s`, `qq:!c`) are not taken into account
+- `multi`, `proto` and `only` declarations without `sub` or `method` are
+  not declaration nodes
+- User-defined operators are recognized where they are declared
+  (`sub infix:<+++>`), not as `&infix:<+++>`
 
 Heuristics that can be wrong:
 
 - A capitalized word is taken to be a type name.
-- `%`, `&` and `@` directly followed by a name are taken to be sigils, so
-  `$a %b` is read as a hash variable.
+- Whether `/` starts a regex and `<` starts a word list is decided from
+  the token before it. After a bare name, spacing decides: `say /x/` and
+  `say <a b>` are a regex and a word list, `pi / 2` and `n < 3` are not.
+  After a closing brace, a line break decides.
+- A `<…>` right after a term is a subscript only when it holds plain words
+  on one line: `%h<key>`, but not `$a<$b`.
+- `q`, `qq`, `Q`, `m`, `rx`, `s`, `tr` and their variants start a quote
+  when a delimiter follows directly, so a sigilless `s/2` is misread, and
+  `q {…}` with a space is not a quote.
+- `%name` and `&name` are variables, except when squeezed between two
+  terms without a space: `$a%b`.
 - A word spelled like a keyword is a keyword wherever it appears, except
-  as a method name or a declared name: `next => 1` and `take(1)` are
-  highlighted as keywords.
-- A declarator used as a pair key (`class => 'x'`) starts a declaration.
+  as a method name, as a declared name, or before `=>`: `take(1)` is
+  highlighted as a keyword.
+- A heredoc is found by looking for `:to` or `:heredoc` with a quote word
+  in the text of the line before it. One mentioned in a string, or in a
+  comment at the end of a line of code, counts when its terminator
+  follows.
+- A quote, regex or heredoc that is not closed is not one: its opener is
+  read as ordinary code. An unclosed `"…"` or `qq` quote, Pod block,
+  embedded comment or regex declaration body runs to the end.
 
 ## Development
 
