@@ -346,7 +346,7 @@ export const trackContext = new ContextTracker<Context>({
     if (skippedTerms.has(term)) return context
     switch (term) {
       case quoteStart: {
-        let opening = readOpening(input)
+        let opening = wordListOpening(input, 0) || readOpening(input)
         if (!opening) return context
         let quote = new Quote(context.quote, opening.open, opening.close, opening.count, 0,
                               opening.interpolates, opening.escapes, false)
@@ -561,6 +561,14 @@ const interpolationAdverbs = new Map<string, number>([
   ["qq", Interpolate.All], ["double", Interpolate.All]
 ])
 
+// The opening of a word list that interpolates, at offset `at`: << or «
+function wordListOpening(input: InputStream, at: number): Opening | null {
+  let open = input.peek(at), count = open == Ch.Less ? 2 : 1
+  if (open != Ch.GuillemetOpen && !(open == Ch.Less && input.peek(at + 1) == Ch.Less)) return null
+  return {open, close: brackets[open], count, start: at + count, kind: "interpolating",
+          interpolates: Interpolate.All, escapes: true}
+}
+
 // The opening of a quote that starts with a quote character at offset `at`.
 function quoteCharOpening(open: number, close: number, at: number, interpolates: number, escapes = true): Opening {
   return {open, close, count: 1, start: at + 1, kind: interpolates ? "interpolating" : "raw", interpolates, escapes}
@@ -748,6 +756,18 @@ function wordListEnd(input: InputStream, strict: boolean) {
   }
 }
 
+// Whether every `{` between two offsets has its `}` there, and the
+// other way around.
+function hasBalancedBraces(input: InputStream, from: number, to: number) {
+  let depth = 0
+  for (let pos = from; pos < to; pos++) {
+    let ch = input.peek(pos)
+    if (ch == Ch.BraceOpen) depth++
+    else if (ch == Ch.BraceClose && --depth < 0) return false
+  }
+  return depth == 0
+}
+
 // A `<` subscript right after a term: %h<key>
 function subscriptEnd(input: InputStream) {
   if (input.next != Ch.Less || isSpace(input.peek(-1)) || input.peek(1) == Ch.Less) return -1
@@ -804,6 +824,13 @@ export const termToken = new ExternalTokenizer((input, stack) => {
       let after = input.peek(1)
       if (after == Ch.Equals || after == Ch.BracketClose || after == Ch.Hyphen && input.peek(2) == Ch.Greater) return
       end = wordListEnd(input, false)
+      // <<a $b>> and «a $b» interpolate. They are read piece by piece,
+      // by rules that count nested delimiters, escapes and the braces
+      // of blocks. A list that those rules would end elsewhere stays
+      // one token.
+      let opening = end > 0 ? wordListOpening(input, 0) : null
+      if (opening && rawEnd(input, opening.start, opening) == end && hasBalancedBraces(input, opening.start, end))
+        return input.acceptToken(quoteStart, opening.start)
     } else {
       end = subscriptEnd(input)
     }

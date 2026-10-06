@@ -2,6 +2,8 @@
 
 ### New features
 
+- Variables, blocks and escapes are interpolated in `<<…>>` and `«…»`
+  word lists.
 - Completion offers the names that the document declares: the variables
   and attributes in scope, routines, classes, enums, subsets and
   constants, and after a `.` the methods.

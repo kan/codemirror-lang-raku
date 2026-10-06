@@ -91,6 +91,9 @@ my $hex = :16<FF> + 0x10;
 say $half < 3 ?? 'small' !! 'big';
 say <a b c>.elems, ' ', (%*ENV<HOME> // '~');
 
+# Word lists that interpolate.
+my @words = <<plain $n {$half} "two words">>, «$hex.fmt('%x') last»;
+
 # A string that spans lines, with interpolation on each of them.
 my $report = "Total: $n
   half of it: { $half }

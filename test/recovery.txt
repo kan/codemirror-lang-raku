@@ -114,6 +114,20 @@ say "abc \
 
 Program(Identifier, StringLiteral)
 
+# Word lists that hold brackets, a backslash or their own delimiter
+
+my @b = << ( [ { >>;
+my @e = «\»; say 1;
+say <<a <<b>> c;
+say <<a }{ b>>, <<$x>>, «$y».elems;
+
+==>
+
+Program(my, VariableName, Operator, StringLiteral,
+  my, VariableName, Operator, StringLiteral, Identifier, Number,
+  Identifier, StringLiteral, Identifier,
+  Identifier, StringLiteral, StringLiteral(VariableName), StringLiteral(VariableName), MethodCall(MethodName))
+
 # A term is expected after a quote that ended with its line
 
 say "oops

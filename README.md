@@ -107,8 +107,13 @@ Not supported yet:
 - Nothing is highlighted inside a regex. A regex literal, and the body of
   a `token` / `rule` / `regex` declaration, is a single `Regex` token,
   including any code blocks in it.
-- Nothing is highlighted inside a heredoc, a `<<…>>` / `«…»` word list or
-  a Pod block: no interpolation, no Pod formatting codes.
+- Nothing is highlighted inside a heredoc or a Pod block: no
+  interpolation in a `qq:to` heredoc, no Pod formatting codes.
+- A `<<…>>` or `«…»` word list that spans lines and holds `{ }`, `( )` or
+  `;` is not taken to be a word list, and neither is one in a subscript
+  or after a pair key (`%h«$key»`, `:a<<b $c>>`). One that holds an
+  unbalanced `{`, or its own delimiter, is a single token in which
+  nothing is interpolated.
 - A quote adverb that is switched off through its argument, as in
   `qq:c(False)[…]`, counts as switched on.
 - The brackets of a block comment are picked for the `toggleBlockComment`
