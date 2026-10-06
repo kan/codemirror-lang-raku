@@ -11,6 +11,6 @@ export declare const
   PackageName: number, RoutineName: number, methodRoutineName: number, RegexName: number,
   EnumName: number, SubsetName: number, ConstantName: number,
   methodDot: number, declaredName: number, declaredMethodName: number, smiley: number,
-  fatArrowKey: number, wordOperator: number,
+  plainName: number, wordOperator: number,
   rawString: number, quoteStart: number, quoteContent: number, quoteNestOpen: number,
   quoteNestClose: number, quoteEnd: number, regexBody: number

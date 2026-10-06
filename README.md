@@ -154,8 +154,11 @@ Heuristics that can be wrong:
 - A capitalized word is taken to be a type name.
 - Whether `/` starts a regex and `<` starts a word list is decided from
   the token before it. After a bare name, spacing decides: `say /x/` and
-  `say <a b>` are a regex and a word list, `pi / 2` and `n < 3` are not.
-  After a closing brace, a line break decides.
+  `say <a b>` are a regex and a word list, `foo / 2` and `n < 3` are not.
+  The built-in terms `pi`, `π`, `tau`, `τ`, `now`, `time` and `rand` are
+  followed by an operator whatever the spacing (`pi /2`), also when a
+  routine of your own has one of these names. After a closing brace, a
+  line break decides.
 - A `<…>` right after a term is a subscript only when it holds plain words
   on one line: `%h<key>`, but not `$a<$b`.
 - `q`, `qq`, `Q`, `m`, `rx`, `s`, `tr` and their variants start a quote
@@ -164,8 +167,10 @@ Heuristics that can be wrong:
 - `%name` and `&name` are variables, except between two terms with no
   space on either side: `$a%b`.
 - A word spelled like a keyword is a keyword wherever it appears, except
-  as a method name, as a declared name, or before `=>`: `take(1)` is
-  highlighted as a keyword.
+  as a method name, as a declared name, before `=>`, and for the
+  keywords that are routines (`take`, `return`, `next`, `not`, …) right
+  before a `(`: `take(1)`. A sigilless variable or a routine of your own
+  that is named like a keyword is highlighted as one.
 - A quote that does not interpolate (`'…'`, `q{…}`), a regex and a
   heredoc have to be closed. Otherwise their opener is read as ordinary
   code.

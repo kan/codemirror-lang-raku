@@ -91,7 +91,8 @@ ConstantName { declaredName }
 
 MethodCall { methodDot MethodName }
 
-Identifier { identifier | fatArrowKey }
+// plainName is a word that would be a keyword elsewhere: `take => 1`, `take(1)`
+Identifier { identifier | plainName }
 // A capitalized name is taken to be a type, and may carry a type
 // smiley: Int:D, Str:U, Any:_
 TypeName { capIdentifier smiley? }
@@ -178,7 +179,7 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 @external tokens quoteToken from "./tokens" { quoteContent, quoteNestOpen, quoteNestClose, quoteEnd }
 // Tokens that depend on whether a term or an operator is expected.
 @external tokens termToken from "./tokens" {
-  rawString, quoteStart, Regex, fatArrowKey, wordOperator[@name=Operator],
+  rawString, quoteStart, Regex, plainName, wordOperator[@name=Operator],
   // &infix:<+>
   operatorVariable[@name=VariableName]
 }

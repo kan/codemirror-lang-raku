@@ -26,6 +26,10 @@
 
 ### Bug fixes
 
+- After the built-in terms `pi`, `π`, `tau`, `τ`, `now`, `time` and `rand`, a
+  `/` or `<` is an operator whatever the spacing: `pi /2`.
+- A keyword that is a routine and is called with parentheses, as in
+  `take(1)` or `not($x)`, is a plain name and not a keyword.
 - The body of a regex declaration that is not closed ends before the next
   `token`, `rule` or `regex` declaration, so that the declarations after
   it are still found.

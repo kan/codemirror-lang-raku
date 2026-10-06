@@ -121,6 +121,17 @@ foo(1, [2, 3], {a => 4})
 Program(Identifier, Parens(Number, Brackets(Number, Number),
   Block(Identifier, Operator, Number)))
 
+# A keyword that is called like a routine
+
+take(1); return(2); not($x); so($y); next(); take 1; return; not $x;
+if ($x) { }; take (3); my ($a)
+
+==>
+
+Program(Identifier, Parens(Number), Identifier, Parens(Number), Identifier, Parens(VariableName),
+  Identifier, Parens(VariableName), Identifier, Parens, take, Number, return, not, VariableName,
+  if, Parens(VariableName), Block, take, Parens(Number), my, Parens(VariableName))
+
 # Self
 
 self.method; self!private

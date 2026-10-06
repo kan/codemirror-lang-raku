@@ -8,7 +8,7 @@ import {
   VariableName, AttributeName, SpecialVariable, operatorVariable,
   Identifier, TypeName, StringLiteral, Interpolation, self, True, False, Nil,
   PackageName, RoutineName, methodRoutineName, RegexName, EnumName, SubsetName, ConstantName,
-  methodDot, declaredName, declaredMethodName, smiley, fatArrowKey, wordOperator,
+  methodDot, declaredName, declaredMethodName, smiley, plainName, wordOperator,
   rawString, quoteStart, quoteContent, quoteNestOpen, quoteNestClose, quoteEnd,
   regexBody
 } from "./syntax.grammar.terms"
@@ -277,7 +277,8 @@ function modeAfterOperator(first: number, second: number, third: number, after: 
 
 // The mode after a token that the terms file has no name for, from its
 // first character. Keywords and identifiers come through here alike;
-// an identifier gets its mode when the Identifier node is reduced.
+// an identifier gets its mode when the Identifier node is reduced,
+// from modeAfter, which also looks at how it is spelled.
 function modeAfterChar(first: number) {
   if (first == Ch.ParenClose || first == Ch.BracketClose || first == Ch.Dollar || first == Ch.At) return Mode.AfterTerm
   // A capitalized name, taken to be a type.
@@ -285,9 +286,20 @@ function modeAfterChar(first: number) {
   return first == Ch.BraceClose ? Mode.AfterBlock : Mode.Term
 }
 
+// The built-in names that stand for a value and take no arguments. The
+// constant `e` is left out: a routine or a variable of one's own is too
+// often named that.
+const termWords = /^(pi|π|tau|τ|now|time|rand)$/
+
 // The mode after the token of the given term at the input's position.
 // `before` is the mode before it.
 function modeAfter(term: number, input: InputStream, offset: number, before: Mode) {
+  // A term that takes no arguments is followed by an operator: pi /2
+  if (term == Identifier) {
+    let end = nameEnd(input, offset)
+    // Most names are longer than these, and are not looked at further.
+    if (end - offset <= 4 && termWords.test(word(input, offset, end))) return Mode.AfterTerm
+  }
   let mode = termModes.get(term)
   if (mode != null) return mode
   let first = input.peek(offset)
@@ -411,8 +423,10 @@ export const trackContext = new ContextTracker<Context>({
     if (term == rawString) context = context.withHeredocs(withHeredocAt(context.heredocs, input, 0))
     return context.withMode(modeAfter(term, input, 0, context.mode))
   },
-  reduce(context, term) {
-    return term == Identifier || term == Interpolation ? context.withMode(termModes.get(term)!) : context
+  reduce(context, term, _stack, input) {
+    // The input is at the start of the node that is reduced.
+    return term == Identifier || term == Interpolation ? context.withMode(modeAfter(term, input, 0, context.mode))
+      : context
   },
   reuse(context, node, _stack, input) {
     context = context.withHeredocs(heredocsAfter(node, input, context.heredocs))
@@ -879,6 +893,10 @@ function subscriptEnd(input: InputStream) {
   return wordListEnd(input, true)
 }
 
+// The keywords that are routines or prefix operators, and can be called
+// with parentheses. `if(1)` and `my($x)` are not calls of this kind.
+const callableKeywords = /^(take|return|emit|next|last|redo|proceed|succeed|so|not)$/
+
 const operatorCategory = /^(infix|prefix|postfix|circumfix|postcircumfix|term)$/
 
 function isWordOperator(name: string) {
@@ -902,10 +920,14 @@ export const termToken = new ExternalTokenizer((input, stack) => {
     let end = nameEnd(input, 0), after = end
     while (input.peek(after) == Ch.Space || input.peek(after) == Ch.Tab) after++
     if (input.peek(after) == Ch.Equals && input.peek(after + 1) == Ch.Greater)
-      return input.acceptToken(fatArrowKey, end)
+      return input.acceptToken(plainName, end)
+    // So is one of the keywords that are routines, when it is called
+    // with parentheses: take(1). They are 2 to 7 characters long.
+    if (input.peek(end) == Ch.ParenOpen && end <= 7 && callableKeywords.test(word(input, 0, end)))
+      return input.acceptToken(plainName, end)
     if (mode == Mode.AfterTerm) {
       // x, xx, min, max, Z and X are operators where one is expected.
-      if (isWordOperator(word(input, 0, end))) input.acceptToken(wordOperator, end)
+      if (end <= 3 && isWordOperator(word(input, 0, end))) input.acceptToken(wordOperator, end)
       return
     }
   } else if (next == Ch.Percent || next == Ch.Amp) {

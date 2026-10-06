@@ -36,6 +36,18 @@ Program(Identifier, Regex, Identifier, Operator, Number,
   Identifier, Regex, VariableName,
   Operator, Operator, Number)
 
+# After a built-in term, an operator follows whatever the spacing
+
+say pi /2, rand <5, tau /4 + π /2, now <3, τ /2;
+say foo /x/, bar <a b>, pie /2/, time-of /3/, e /4/;
+
+==>
+
+Program(Identifier, Identifier, Operator, Number, Identifier, Operator, Number,
+  Identifier, Operator, Number, Operator, Identifier, Operator, Number, Identifier, Operator, Number,
+  Identifier, Operator, Number,
+  Identifier, Identifier, Regex, Identifier, StringLiteral, Identifier, Regex, Identifier, Regex, Identifier, Regex)
+
 # After a closing brace, a line break decides
 
 if $a { 1 }
