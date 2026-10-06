@@ -1,6 +1,6 @@
 import {raku, rakuLanguage, rakuCompletion} from "../dist/index.js"
 import {fileTests} from "@lezer/generator/dist/test"
-import {LanguageSupport, getIndentation, foldable, matchBrackets} from "@codemirror/language"
+import {LanguageSupport, getIndentation, foldable, matchBrackets, ensureSyntaxTree} from "@codemirror/language"
 import {EditorState} from "@codemirror/state"
 import {CompletionContext} from "@codemirror/autocomplete"
 import {toggleBlockComment} from "@codemirror/commands"
@@ -583,6 +583,126 @@ describe("completion", () => {
     assert.deepStrictEqual(complete("say %*E|"), ["%*ENV"])
     assert.deepStrictEqual(complete("say $?FI|"), ["$?FILE"])
     assert.ok(complete("say $*|").includes("$*OUT"))
+  })
+
+  // The names that are declared in the document.
+  const scoped = `my $count = 1; my Int @items; our %registry;
+sub outer($arg, :$named, *@rest) {
+  my %seen;
+  for @items -> $item, $index {
+    say CURSOR
+  }
+}
+sub other($elsewhere) { my $inner; state $kept }
+`
+  const at = text => complete(scoped.replace("CURSOR", text)).sort()
+
+  it("completes the variables that are declared in scope", () => {
+    assert.deepStrictEqual(at("$|"), ["$arg", "$count", "$index", "$item", "$named"])
+    assert.deepStrictEqual(at("@|"), ["@items", "@rest"])
+    assert.deepStrictEqual(at("%s|"), ["%seen"])
+    assert.deepStrictEqual(at("%re|"), ["%registry"])
+    assert.deepStrictEqual(at("$it|"), ["$item"])
+    assert.deepStrictEqual(complete("my ($a, $b) = 1, 2; say $|").sort(), ["$a", "$b"])
+    assert.deepStrictEqual(complete("my &callback = sub ($p) { say $| }; my $after;").sort(), ["$after", "$p"])
+    assert.deepStrictEqual(complete('my $name; say "a { $n| } b"'), ["$name"])
+  })
+
+  it("completes the attributes of the class", () => {
+    let code = "class A { has $.name; has Int $!secret; has @.list; method m { say CURSOR } }\nclass B { has $.b }"
+    let at = text => complete(code.replace("CURSOR", text)).sort()
+    assert.deepStrictEqual(at("$!|"), ["$!name", "$!secret"])
+    assert.deepStrictEqual(at("$.|"), ["$.name"])
+    assert.deepStrictEqual(at("@.l|"), ["@.list"])
+    assert.deepStrictEqual(at("$|"), ["$!name", "$!secret", "$.name"])
+  })
+
+  it("completes declared routines, types and constants", () => {
+    let code = "sub my-helper { }; class Widget { method spin { } }; constant LIMIT = 1; enum Shade <a b>; subset Small of Int;\n"
+    assert.deepStrictEqual(complete(code + "my-h|"), ["my-helper"])
+    assert.deepStrictEqual(complete(code + "Wid|"), ["Widget"])
+    assert.deepStrictEqual(complete(code + "LIM|"), ["LIMIT"])
+    assert.deepStrictEqual(complete(code + "my Sha|"), ["Shade"])
+    assert.deepStrictEqual(complete(code + "my Sma|"), ["Small"])
+    assert.deepStrictEqual(complete(code + "spi|"), [])
+    assert.deepStrictEqual(complete("sub a { sub nested-one { } }; nested|"), [])
+    assert.deepStrictEqual(complete("sub a { sub nested-one { }; nested| }"), ["nested-one"])
+  })
+
+  it("completes the methods of the document after a dot", () => {
+    let code = "class Widget { method spin { }; method !hidden { }; submethod BUILD { } }\nsub spiral { }\n"
+    assert.deepStrictEqual(complete(code + "$w.spi|"), ["spin"])
+    assert.deepStrictEqual(complete(code + "$w.|").filter(label => /^spi|^BUILD|^hidden|^elems$/.test(label)).sort(),
+                           ["BUILD", "elems", "spin"])
+    assert.deepStrictEqual(complete(code + "$w .= spi|"), ["spin"])
+  })
+
+  it("offers a name once when it is both declared and built in", () => {
+    for (let code of ["sub say { }; class Int { }; |", "class A { method elems { } }; $x.|"]) {
+      let labels = complete(code, true)
+      assert.deepStrictEqual(labels.filter((label, i) => labels.indexOf(label) != i), [], code)
+    }
+  })
+
+  it("does not offer variables where one is being declared", () => {
+    for (let code of ["my $count; my $c|", "my $count; my Int $c|", "my $count; sub f($c|", "my $count; for @a -> $c|",
+                      "my $count; my ($a, $c|", "my $count; has $.c|", "my $count; f(-> $x, $c|"])
+      assert.strictEqual(complete(code), null, code)
+    assert.deepStrictEqual(complete("my $count; f($c|"), ["$count"])
+    assert.deepStrictEqual(complete("my $count; my $x = $c|"), ["$count"])
+    // The sigil alone, before a name is typed.
+    for (let code of ["my $count; my $|", "my $count; sub f($|", "my $count; my ($a, $|", "my $count; for @a -> $|"])
+      assert.strictEqual(complete(code), null, code)
+  })
+
+  it("offers variables in a default value, a constraint, and after the first declared one", () => {
+    for (let code of ["my $count; sub f($a = $c|", "my $count; sub f($a where $c|", "my $count; my Int $a, $c|",
+                      "my $count; my $a, $c|", "my $count; -> $x = $c|"])
+      assert.deepStrictEqual(complete(code), ["$count"], code)
+  })
+
+  it("finds the parameters and variables of less plain declarations", () => {
+    assert.deepStrictEqual(complete("for @a -> $x, :$named, *@rest { say $| }").sort(), ["$named", "$x"])
+    assert.deepStrictEqual(complete("for @a -> $x is rw { say $| }"), ["$x"])
+    assert.deepStrictEqual(complete("my $d; for @a -> $x = $d { say $| }").sort(), ["$d", "$x"])
+    assert.deepStrictEqual(complete("sub f($a = $b, :$c where $e) { say $| }").sort(), ["$a", "$c"])
+    assert.deepStrictEqual(complete("my Array[Int] @items; say @|"), ["@items"])
+    assert.deepStrictEqual(complete("class A { has ($.a, $.b); method m { say $.| } }").sort(), ["$.a", "$.b"])
+    assert.deepStrictEqual(complete("constant $LIMIT = 3; constant @list = 1, 2; say $L|"), ["$LIMIT"])
+  })
+
+  it("offers a routine with and without its sigil, and leaves operators out", () => {
+    let code = "sub my-helper { }; sub infix:<+++>($a, $b) { };\n"
+    assert.deepStrictEqual(complete(code + "say &my|"), ["&my-helper"])
+    assert.deepStrictEqual(complete(code + "my-h|"), ["my-helper"])
+    assert.deepStrictEqual(complete(code + "inf|"), [])
+    assert.deepStrictEqual(complete(code + "say &inf|"), [])
+  })
+
+  // The parameters of a block are outside its node, so they are not
+  // kept with the names that are cached for it.
+  it("sees a change to the parameters of a block that is reused", () => {
+    let body = "  my $local = 1;\n".repeat(400)
+    let doc = "sub f($alpha, $beta) {\n" + body + "  say $\n}\n", pos = doc.lastIndexOf("$") + 1
+    // A state only parses the start of a long document by itself.
+    let parsed = state => {
+      ensureSyntaxTree(state, state.doc.length, 1e4)
+      return state.update({}).state
+    }
+    let state = parsed(stateFor(doc)), source = state.languageDataAt("autocomplete", pos)[0]
+    let labels = state => source(new CompletionContext(state, pos, false)).options.map(option => option.label)
+    assert.ok(labels(state).includes("$alpha"))
+    let from = doc.indexOf("alpha")
+    state = parsed(state.update({changes: {from, to: from + 5, insert: "omega"}}).state)
+    assert.ok(labels(state).includes("$omega"))
+    assert.ok(!labels(state).includes("$alpha"))
+  })
+
+  it("does not list variables for a sigil that is as often an operator", () => {
+    assert.strictEqual(complete("my %h; my &f; $a %|"), null)
+    assert.strictEqual(complete("my %h; my &f; $a &|"), null)
+    assert.deepStrictEqual(complete("my %h; my &f; say %h|"), ["%h"])
+    assert.strictEqual(complete("say $|"), null)
   })
 
   it("does not complete where a name is being made up", () => {

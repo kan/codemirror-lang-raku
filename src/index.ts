@@ -76,8 +76,9 @@ export const rakuLanguage = LRLanguage.define({
   }
 })
 
-/// Completion of Raku keywords and of the commonly used built-in types,
-/// routines, methods and special variables.
+/// Completion of Raku keywords, of the commonly used built-in types,
+/// routines, methods and special variables, and of the names that the
+/// document declares.
 export const rakuCompletion: Extension = rakuLanguage.data.of({autocomplete: rakuCompletionSource})
 
 /// Raku language support, with completion, and with block comment

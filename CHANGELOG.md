@@ -2,6 +2,9 @@
 
 ### New features
 
+- Completion offers the names that the document declares: the variables
+  and attributes in scope, routines, classes, enums, subsets and
+  constants, and after a `.` the methods.
 - Toggling a block comment picks brackets that fit the selection:
   `` #`[ … ] `` when the selection holds an unbalanced parenthesis, and so
   on. A comment is removed whichever bracket it was written with.

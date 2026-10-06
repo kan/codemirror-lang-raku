@@ -3,6 +3,7 @@ import {syntaxTree} from "@codemirror/language"
 import {SyntaxNode, Tree} from "@lezer/common"
 import {EditorState} from "@codemirror/state"
 import {keywordTags} from "./keywords"
+import {localNames, declaresVariable, hasSigil} from "./local"
 
 function completions(type: string, ...labels: string[]): Completion[] {
   return labels.join(" ").split(" ").map(label => ({label, type}))
@@ -65,6 +66,7 @@ const globals = [...keywords, ...constants, ...types, ...routines]
 // `:key` is not a name from the list.
 const nameTail = /^(\w[\w:'\-]*)?$/
 const specialVariableTail = /^[$@%&][*?][\w\-]*$/
+const variableTail = /^[$@%&][!.^:]?[\w'\-]*$/
 
 // Whether the position of `node` holds code, as opposed to the text of
 // a string, a regex, a comment or Pod. An interpolation is code again.
@@ -89,8 +91,23 @@ function isPrivateMethodName(tree: Tree, state: EditorState, node: SyntaxNode) {
     /^(self|VariableName|AttributeName|SpecialVariable|Identifier|TypeName|Parens|Brackets|[)\]])$/.test(invocant.name)
 }
 
-/// A completion source for Raku keywords and for the commonly used
-/// built-in types, routines, methods and special variables.
+// The names declared in the document, followed by the built-in ones
+// that they do not hide.
+function withLocal(local: readonly Completion[], builtin: readonly Completion[]) {
+  if (!local.length) return builtin
+  let labels = new Set<string>(), result = []
+  for (let completion of local) {
+    if (labels.has(completion.label)) continue
+    labels.add(completion.label)
+    result.push(completion)
+  }
+  for (let completion of builtin) if (!labels.has(completion.label)) result.push(completion)
+  return result
+}
+
+/// A completion source for Raku keywords, for the commonly used
+/// built-in types, routines, methods and special variables, and for the
+/// names that the document declares.
 export const rakuCompletionSource: CompletionSource = context => {
   let {state, pos} = context, tree = syntaxTree(state), node = tree.resolveInner(pos, -1)
   if (!inCode(node)) return null
@@ -99,17 +116,33 @@ export const rakuCompletionSource: CompletionSource = context => {
   let special = node.name == "SpecialVariable" ? node : context.matchBefore(/[$@%&][*?]$/)
   if (special) return {from: special.from, options: specialVariables, validFor: specialVariableTail}
 
-  if (node.name == "MethodName") return {from: node.from, options: methods, validFor: nameTail}
+  // A variable, or a sigil that is about to be one. A lone `%` or `&`
+  // is as often an operator, and has to be followed by a name first.
+  let isVariableNode = node.name == "VariableName" || node.name == "AttributeName"
+  let sigil = isVariableNode ? null : context.matchBefore(/[$@]$|[$@%&][!.]$/)
+  if (isVariableNode || sigil) {
+    let from = isVariableNode ? node.from : sigil!.from
+    // A lone sigil is not a node. It lies in the node around it.
+    let parent = isVariableNode ? node.parent! : tree.resolveInner(from, 0)
+    let prev = isVariableNode ? node.prevSibling : parent.childBefore(from)
+    if (declaresVariable(state, parent, prev)) return null
+    let options = withLocal(localNames(parent, state).names.filter(hasSigil), [])
+    return options.length ? {from, options, validFor: variableTail} : null
+  }
+
+  let local = localNames(node, state), localMethods = () => withLocal(local.methods, methods)
+  if (node.name == "MethodName") return {from: node.from, options: localMethods(), validFor: nameTail}
   // A dot or `.=` with no name after it yet. Two dots are a range operator.
   let before = state.sliceDoc(Math.max(0, pos - 2), pos)
-  if (before == ".=") return {from: pos, options: methods, validFor: nameTail}
+  if (before == ".=") return {from: pos, options: localMethods(), validFor: nameTail}
   if (/(^|[^.])\.$/.test(before)) {
     // The dot of `1.5` and of `v6.d` is far more often typed than a
     // method call on a number.
     let numeric = /^(Number|Version)$/.test(tree.resolveInner(pos - 1, -1).name)
-    return numeric && !context.explicit ? null : {from: pos, options: methods, validFor: nameTail}
+    return numeric && !context.explicit ? null : {from: pos, options: localMethods(), validFor: nameTail}
   }
 
+  let localGlobals = () => withLocal(local.names.filter(completion => !hasSigil(completion)), globals)
   // A keyword's node is named after the keyword, as are those of `,` and `;`.
   let isKeyword = /^\w/.test(node.name) && node.name == state.sliceDoc(node.from, node.to)
   if (isKeyword || node.name == "Identifier" || node.name == "TypeName") {
@@ -117,13 +150,13 @@ export const rakuCompletionSource: CompletionSource = context => {
     // `$x .= trim` calls a method.
     let prev = node.prevSibling
     let afterDotAssign = prev != null && prev.name == "Operator" && state.sliceDoc(prev.from, prev.to) == ".="
-    return {from: node.from, options: afterDotAssign ? methods : globals, validFor: nameTail}
+    return {from: node.from, options: afterDotAssign ? localMethods() : localGlobals(), validFor: nameTail}
   }
 
-  // Other names (variables, pair keys, names being declared) are made up
-  // by the user, so only a position where no token has been started
-  // gets the whole list, and only on request.
+  // Other names (pair keys, names being declared) are made up by the
+  // user, so only a position where no token has been started gets the
+  // whole list, and only on request.
   if (context.explicit && /^[\s(\[{,;=]?$/.test(state.sliceDoc(Math.max(0, pos - 1), pos)))
-    return {from: pos, options: globals, validFor: nameTail}
+    return {from: pos, options: localGlobals(), validFor: nameTail}
   return null
 }

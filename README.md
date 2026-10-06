@@ -67,8 +67,9 @@ unbalanced parenthesis).</p></dd>
 <dd><p>A language provider based on the Lezer Raku parser, extended with
 highlighting and indentation information.</p></dd>
 <dt><code><strong>rakuCompletion</strong>: Extension</code></dt>
-<dd><p>Completion of Raku keywords and of the commonly used built-in types,
-routines, methods and special variables. <code>raku()</code> includes it. To
+<dd><p>Completion of Raku keywords, of the commonly used built-in types,
+routines, methods and special variables, and of the variables, routines,
+types and methods that the document declares. <code>raku()</code> includes it. To
 leave it out, use <code>rakuLanguage</code> in place of <code>raku()</code>.</p></dd>
 <dt><code><strong>parser</strong>: LRParser</code></dt>
 <dd><p>The Lezer parser for Raku, without the editor-specific node props.
@@ -118,11 +119,14 @@ Not supported yet:
 - A user-defined operator is recognized where it is declared
   (`sub infix:<+++>`) and as a routine (`&infix:<+++>`), not where it is
   used as an operator.
-- Completion offers a fixed list of names. It does not offer the
-  variables, routines and classes of the document, and after a `.` it
-  offers the same methods whatever the type of the invocant. In a
-  string, only the code in `{ }` and in a subscript is completed, not
-  the method name of `"$x.name()"`.
+- Completion does not know types. After a `.` it offers the built-in
+  methods and every method that the document declares, whatever the
+  invocant is. Names from other files are not offered.
+- Completion takes a variable to be declared by `my`, `our`, `state` or
+  `has`, in a signature, or after the `->` of a pointy block. Placeholder
+  variables (`$^a`) and sigilless variables (`my \x`) are not offered.
+- In a string, only the code in `{ }` and in a subscript is completed,
+  not the method name of `"$x.name()"`.
 
 Heuristics that can be wrong:
 
