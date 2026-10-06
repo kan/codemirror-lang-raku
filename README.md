@@ -5,13 +5,23 @@
 indentation, code folding, bracket matching and completion, built on a
 [Lezer](https://lezer.codemirror.net/) grammar.
 
-> **Status: early development.** The package is not on npm yet. See
-> [Known limitations](#known-limitations) for what is missing.
-
-Covered so far: comments and Pod, quotes of all kinds (`'…'`, `"…"`, `q` /
-`qq` / `Q` with any delimiter, heredocs, `<word lists>`) with interpolation,
+It covers comments and Pod, quotes of all kinds (`'…'`, `"…"`, `q` / `qq` /
+`Q` with any delimiter, heredocs, `<word lists>`) with interpolation,
 regexes, numbers, variables with sigils and twigils, keywords, operators,
 blocks and declarations.
+
+Try it in the [demo](https://kan.github.io/codemirror-lang-raku/), which
+shows the syntax tree next to the editor.
+
+> **Status: 0.x.** The node names of the syntax tree can still change
+> between minor versions. See [Known limitations](#known-limitations) for
+> what is missing.
+
+## Installation
+
+```sh
+npm install codemirror-lang-raku
+```
 
 ## Usage
 
@@ -137,8 +147,11 @@ Heuristics that can be wrong:
 
 ```sh
 npm install
-npm test     # builds, then runs the grammar tests in test/*.txt
+npm test     # builds, then runs the tests in test/
+npm run dev  # serves demo/, an editor next to the syntax tree of its content
 ```
+
+The demo loads the sources, so a change to the grammar shows up on reload.
 
 ## License
 

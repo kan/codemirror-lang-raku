@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>codemirror-lang-raku demo</title>
+<style>
+  body { margin: 0 auto; padding: 16px; max-width: 1400px; font-family: system-ui, sans-serif; color: #222; background: #fff; }
+  h1 { font-size: 1.2rem; }
+  label { margin-right: 16px; }
+  main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; margin-top: 12px; }
+  @media (max-width: 800px) { main { grid-template-columns: minmax(0, 1fr); } }
+  #editor, #tree { border: 1px solid #ccc; height: 75vh; }
+  #editor .cm-editor { height: 100%; }
+  #tree { box-sizing: border-box; padding: 8px; overflow: auto; font: 12px/1.4 ui-monospace, monospace; white-space: pre; }
+  .error { color: #c00; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>codemirror-lang-raku demo</h1>
+<p>
+  <label>Sample <select id="sample"></select></label>
+  <span id="status"></span>
+</p>
+<main>
+  <div id="editor"></div>
+  <div id="tree" aria-label="Syntax tree"></div>
+</main>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

@@ -441,6 +441,17 @@ describe("completion", () => {
   })
 })
 
+// Only dist/index.* is published, so the declarations must not refer
+// to the other files that the build leaves in dist.
+describe("package", () => {
+  it("has declarations that stand on their own", () => {
+    let dist = path.join(caseDir, "../dist")
+    let declarations = fs.readFileSync(path.join(dist, "index.d.ts"), "utf8")
+    assert.deepStrictEqual(declarations.match(/["']\.\.?\/[^"']*["']/g), null)
+    assert.strictEqual(fs.readFileSync(path.join(dist, "index.d.cts"), "utf8"), declarations)
+  })
+})
+
 describe("language support", () => {
   it("exports a LanguageSupport factory", () => {
     let support = raku()

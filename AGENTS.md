@@ -37,6 +37,9 @@ CodeMirror 6 用の Raku（旧 Perl 6）言語サポートを作るリポジト�
 | `npm install` | 依存の導入。`prepare` でビルドも走る |
 | `npm run build` | `rollup -c`。文法からパーサを生成し、`dist/` に ESM、CJS、型定義を出す |
 | `npm test` | ビルドしてから `mocha test/test.js` を実行する |
+| `npm run dev` | `vite demo`。`demo/` のページを開発サーバーで出す。`src/` を直接読むので、ビルドは要らない |
+| `npm run build:demo` | `vite build demo`。`dist-demo/` に静的なページを出す。`.github/workflows/demo.yml` が main への push のたびに実行し、GitHub Pages（https://kan.github.io/codemirror-lang-raku/）へ出す |
+| `npm pack --dry-run` | 公開されるファイルの一覧を出す。`files` を変えたら確かめる |
 
 **テストは `dist/index.js` を読む。** `npm test` は `pretest` でビルドするので問題ないが、
 `npx mocha` を直接叩くときは先に `npm run build` を実行する。
@@ -63,6 +66,12 @@ node -e 'import("./dist/index.js").then(m => console.log(m.rakuLanguage.parser.p
 | `test/*.txt` | 文法テスト。`@lezer/generator` の `fileTests` 形式 |
 | `test/fixtures/*.raku` | エラーノード無しでパースできるべき実コード |
 | `test/test.js` | 上の 2 つに加え、ハイライト、識別子の文字範囲の一致、増分パース、インデント、折りたたみ、括弧の対応、補完、export の検査 |
+| `demo/` | 動作確認用のページ。エディタと、その内容の構文木を並べて出す。npm には含めない |
+| `CHANGELOG.md` | 利用者向けの変更履歴（英語）。挙動か公開インターフェースを変えたら、未リリースの版の節に足す |
+
+**npm に入るのは `dist/index.*` だけ**（`package.json` の `files`）。`src/index.ts` が別ファイルの型を
+export すると、`dist/index.d.ts` が tarball に無い `./complete` などを参照する。`test/test.js` の
+`package` がこれを検出する。
 
 **`tokens.ts` で新しい項を import したら、`src/syntax.grammar.terms.d.ts` にも宣言を足す。**
 足さないと型検査で落ちる。
@@ -208,7 +217,7 @@ DESIGN.md「作業フェーズ」に対する現在地。フェーズを終え�
 | 2. 基本ハイライト | 済み。コメント（行、`#|` と `#=`、`` #`( ) ``）、`'…'` と `"…"`（`$var` と `{ }` の補間）、数値、キーワード、変数、ブロック、宣言 |
 | 3. 難所対応 | 済み。クォート構文全般、heredoc、補間（添字、呼び出し、メソッド呼び出し）、正規表現、Pod、単語演算子とメタ演算子。正規表現と heredoc の中身は 1 トークンで、中は色分けしない |
 | 4. エディタ機能 | 済み。括弧のインデント、折りたたみ（ブロック、括弧、Pod、heredoc、埋め込みコメント）、括弧の対応、固定の一覧による補完。文の継続行のインデントと、文書内の名前の補完は無い |
-| 5. 公開準備 | README の下書きだけ済み。`demo/` と CHANGELOG は未着手 |
+| 5. 公開準備 | 済み。README、CHANGELOG、`demo/`、`npm pack` での中身の確認。`npm publish` はしていない。CHANGELOG の 0.1.0 は日付が `unreleased` のままなので、公開するときに日付へ直す |
 
 未対応の構文と、誤判定しうる箇所の一覧は README の「Known limitations」にある。対応したら
 そこから消す。
