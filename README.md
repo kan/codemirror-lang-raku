@@ -141,10 +141,6 @@ Heuristics that can be wrong:
 - A word spelled like a keyword is a keyword wherever it appears, except
   as a method name, as a declared name, or before `=>`: `take(1)` is
   highlighted as a keyword.
-- A heredoc is found by looking for `:to` or `:heredoc` with a quote word
-  in the text of the line before it. One mentioned in a string, or in a
-  comment at the end of a line of code, counts when its terminator
-  follows.
 - What happens to an unclosed construct depends on its kind. The opener
   of a quote that does not interpolate (`'…'`, `q`), of a regex or of a
   heredoc is read as ordinary code. A `"…"` or `qq` quote, a Pod block,

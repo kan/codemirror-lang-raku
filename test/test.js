@@ -178,16 +178,21 @@ describe("incremental parsing", () => {
   }
 })
 
-// A heredoc is found from the text of the line before it, which the
-// parser does not know the heredoc's token depends on.
+// A heredoc's token depends on the quotes of the line before it, which
+// the tokenizers' context carries to it.
 describe("incremental parsing of heredocs", () => {
   let filler = "my $a = 1;\nsay $a + 2;\n".repeat(40)
-  let base = filler + "my $x = foo(1, 2, q:to/END/, 3, 4);\n  body { ' text\n  END\nsay 'after';\n" + filler
+  // The opener is far from the end of its line, so that an edit to it
+  // leaves the tokens between it and the heredoc to be reused.
+  let base = filler + "my $x = foo(1, 2, q:to/END/, 3, 4, " + "'padding', ".repeat(20) + "5);\n" +
+    "  body { ' text\n  END\nsay 'after';\n" + filler
   let edits = {
     "renaming the terminator in the opener": ["END/", 3, "EOT"],
     "removing the adverb": [":to", 3, ""],
     "an edit earlier on the opener's line": ["foo(1", 3, "bar"],
     "commenting out the opener's line": ["my $x = foo", 0, "# "],
+    "putting the opener in a string": ["q:to/END/", 9, '"q:to/END/"'],
+    "a comment before the opener": ["q:to/END/", 0, "#`(x) "],
     "renaming the terminator": ["END\n", 3, "EOT"],
     "an edit in the body": ["body", 4, "x"]
   }

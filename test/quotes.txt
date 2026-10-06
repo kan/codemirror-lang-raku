@@ -204,6 +204,131 @@ END
 
 Program(LineComment, Identifier, Number, END)
 
+# A heredoc opener in a comment at the end of a line
+
+say 1; # like q:to/END/
+say 2;
+END
+
+==>
+
+Program(Identifier, Number, LineComment, Identifier, Number, END)
+
+# A heredoc opener in a string
+
+say "q:to/END/", 'qq:to/END/';
+say 2;
+END
+
+==>
+
+Program(Identifier, StringLiteral, StringLiteral, Identifier, Number, END)
+
+# A heredoc opener after a string and a variable
+
+say "a # b", 'it''s', $q, %h<q>, q:to/END/; # q:to/NOT/
+  text
+  END
+say 2;
+
+==>
+
+Program(Identifier, StringLiteral, StringLiteral, StringLiteral, VariableName, VariableName, StringLiteral,
+  StringLiteral, LineComment, Heredoc, Identifier, Number)
+
+# A heredoc with a quote as its delimiter
+
+say q:to"END", qq:to'EOT';
+  one
+  END
+  two
+  EOT
+say 2;
+
+==>
+
+Program(Identifier, StringLiteral, StringLiteral, Heredoc, Identifier, Number)
+
+# A heredoc opener after an embedded comment
+
+say #`(q:to/NOT/) q:to/END/;
+  text
+  END
+say 2;
+
+==>
+
+Program(Identifier, BlockComment, StringLiteral, Heredoc, Identifier, Number)
+
+# A heredoc opener after quotes and a regex that hold a comment sign
+
+say q{ # it's } ~ $s.subst(/\#/, 1), <#fff>, q:to/END/;
+  text
+  END
+say 2;
+
+==>
+
+Program(Identifier, StringLiteral, Operator, VariableName, MethodCall(MethodName), Parens(Regex, Number),
+  StringLiteral, StringLiteral, Heredoc, Identifier, Number)
+
+# A heredoc opener in an interpolation
+
+say "{ q:to/END/ }";
+  text
+  END
+say 2;
+
+==>
+
+Program(Identifier, StringLiteral(Interpolation(StringLiteral)), Heredoc, Identifier, Number)
+
+# A heredoc opener in a string that spans lines
+
+say "a
+q:to/END/";
+say 2;
+END
+
+==>
+
+Program(Identifier, StringLiteral, Identifier, Number, END)
+
+# A heredoc opened before a line break in an argument list
+
+foo(q:to/A/,
+  one
+  A
+  q:to/B/);
+  two
+  B
+say 2;
+
+==>
+
+Program(Identifier, Parens(StringLiteral, Heredoc, StringLiteral), Heredoc, Identifier, Number)
+
+# A quote with a negated or an empty heredoc adverb
+
+say q:!to/END/, q:to//;
+
+say 2;
+END
+
+==>
+
+Program(Identifier, StringLiteral, StringLiteral, Identifier, Number, END)
+
+# A name that ends like a heredoc opener
+
+say $*q:to/END/;
+say 2;
+END
+
+==>
+
+Program(Identifier, SpecialVariable, PairKey, Operator, END, Operator, Identifier, Number, END)
+
 # A name that is spelled like a quote word
 
 given $s { when S { say 1 } }; multi q { 1 }; multi m ($x) { }

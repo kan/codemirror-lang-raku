@@ -1,3 +1,11 @@
+## Unreleased
+
+### Bug fixes
+
+- A heredoc opener that is only mentioned in a string or in a comment no
+  longer starts a heredoc. Heredocs are now found from the quote tokens
+  of the line, not from its text.
+
 ## 0.1.0 (2026-10-06)
 
 ### New features

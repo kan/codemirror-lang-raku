@@ -53,6 +53,7 @@ const enum Ch {
   Underscore = 95,
   Backtick = 96,
   a = 97,
+  q = 113,
   v = 118,
   z = 122,
   BraceOpen = 123,
@@ -166,13 +167,36 @@ class Quote {
   }
 }
 
+const noHeredocs: readonly string[] = []
+
 class Context {
-  constructor(readonly mode: Mode, readonly quote: Quote | null) {}
   // An old node is only reused where this is the same as where it was
   // made. The mode is left out: it changes with every token, which
   // would rule out nearly all reuse, and `reuse` works it out again.
-  get hash() { return this.quote ? this.quote.hash : 0 }
-  withMode(mode: Mode) { return mode == this.mode ? this : new Context(mode, this.quote) }
+  readonly hash: number
+  constructor(readonly mode: Mode,
+              readonly quote: Quote | null,
+              // The terminators of the heredocs that were opened on the
+              // current line, whose text starts on the next one.
+              readonly heredocs: readonly string[],
+              hash = -1) {
+    if (hash < 0) {
+      hash = quote ? quote.hash : 0
+      for (let terminator of heredocs) {
+        hash = (hash * 31 + 17) | 0
+        for (let i = 0; i < terminator.length; i++) hash = (hash * 31 + terminator.charCodeAt(i)) | 0
+      }
+      // Negative values stand for "not worked out yet".
+      hash &= 0x7fffffff
+    }
+    this.hash = hash
+  }
+  withMode(mode: Mode) {
+    return mode == this.mode ? this : new Context(mode, this.quote, this.heredocs, this.hash)
+  }
+  withHeredocs(heredocs: readonly string[]) {
+    return heredocs == this.heredocs ? this : new Context(this.mode, this.quote, heredocs)
+  }
 }
 
 // The mode after a token or a node, for those where the term settles
@@ -222,28 +246,100 @@ function modeAfter(term: number, input: InputStream, offset: number, before: Mod
 
 const skippedTerms = new Set([LineComment, DocComment, BlockComment, Pod, Heredoc])
 
+// The terminator that the quote at offset `at` names, when that quote
+// opens a heredoc: END for q:to/END/
+function heredocTerminator(input: InputStream, at: number) {
+  let first = input.peek(at)
+  if (first != Ch.q && first != Ch.Q) return null
+  let opening = readOpening(input, at)
+  if (!opening || !opening.heredoc) return null
+  let end = opening.start
+  while (input.peek(end) != opening.close && input.peek(end) != Ch.Newline && input.peek(end) >= 0) end++
+  // An empty one, as in the `q:to//` of a quote that is being typed,
+  // would end the heredoc at the next blank line.
+  return word(input, opening.start, end).trim() || null
+}
+
+// `heredocs`, with the heredoc that the quote at offset `at` opens, if
+// it opens one.
+function withHeredocAt(heredocs: readonly string[], input: InputStream, at: number) {
+  let terminator = heredocTerminator(input, at)
+  return terminator == null ? heredocs : heredocs.concat(terminator)
+}
+
+function hasNewline(input: InputStream, from: number, to: number) {
+  for (let i = from; i < to; i++) if (input.peek(i) == Ch.Newline) return true
+  return false
+}
+
+// The heredocs that are open after a reused node, of which the input is
+// at the start. As when tokens are shifted, a line break between tokens
+// and the text of a heredoc close the ones before them.
+function heredocsAfter(node: Tree, input: InputStream, before: readonly string[]) {
+  // Most reused nodes are single tokens.
+  if (!node.children.length && node.type.id != StringLiteral && node.type.id != Heredoc) return before
+  let cursor = node.cursor(), found: {pos: number, terminator: string}[] = [], closedAt = -1
+  // Goes over the node at the cursor from its end, and tells whether
+  // the heredocs before some point in it are closed.
+  function scan(): boolean {
+    let type = cursor.type.id, {from, to} = cursor
+    if (type == Heredoc) { closedAt = to; return true }
+    if (type == StringLiteral) {
+      let terminator = heredocTerminator(input, from)
+      if (terminator != null) found.push({pos: from, terminator})
+    }
+    if (!cursor.lastChild()) return false
+    // Between the pieces of a string lies its text, not whitespace.
+    let gaps = type != StringLiteral
+    for (let gapEnd = to;;) {
+      if (gaps && hasNewline(input, cursor.to, gapEnd)) { closedAt = gapEnd; break }
+      if (scan()) break
+      gapEnd = cursor.from
+      if (!cursor.prevSibling()) {
+        if (gaps && hasNewline(input, from, gapEnd)) closedAt = gapEnd
+        break
+      }
+    }
+    cursor.parent()
+    return closedAt >= 0
+  }
+  scan()
+  if (!found.length && closedAt < 0) return before
+  let after = found.filter(heredoc => heredoc.pos >= closedAt).sort((a, b) => a.pos - b.pos).map(heredoc => heredoc.terminator)
+  return closedAt < 0 ? before.concat(after) : after.length ? after : noHeredocs
+}
+
 export const trackContext = new ContextTracker<Context>({
-  start: new Context(Mode.Term, null),
+  start: new Context(Mode.Term, null, noHeredocs),
   shift(context, term, _stack, input) {
+    if (term == Heredoc) return context.withHeredocs(noHeredocs)
     if (skippedTerms.has(term)) return context
     switch (term) {
       case quoteStart: {
         let opening = readOpening(input)
-        return opening ? new Context(Mode.Term, new Quote(context.quote, opening.open, opening.close, opening.count, 0))
+        return opening ? new Context(Mode.Term, new Quote(context.quote, opening.open, opening.close, opening.count, 0),
+                                     withHeredocAt(context.heredocs, input, 0))
           : context
       }
       case quoteNestOpen: case quoteNestClose: {
         let quote = context.quote
         if (!quote) return context
         let depth = quote.depth + (term == quoteNestOpen ? 1 : -1)
-        return new Context(Mode.Term, new Quote(quote.parent, quote.open, quote.close, quote.count, depth))
+        return new Context(Mode.Term, new Quote(quote.parent, quote.open, quote.close, quote.count, depth), context.heredocs)
       }
       case quoteEnd:
-        return new Context(Mode.AfterTerm, context.quote && context.quote.parent)
+        return new Context(Mode.AfterTerm, context.quote && context.quote.parent, context.heredocs)
     }
     // The whitespace token has no term to go by. It is the only token
-    // that starts with a space.
-    if (!termModes.has(term) && isSpace(input.next)) return context
+    // that starts with a space. A line break in it leaves the heredocs
+    // that found no terminator behind.
+    if (!termModes.has(term) && isSpace(input.next)) {
+      if (!context.heredocs.length) return context
+      for (let pos = 0; isSpace(input.peek(pos)); pos++)
+        if (input.peek(pos) == Ch.Newline) return context.withHeredocs(noHeredocs)
+      return context
+    }
+    if (term == rawString) context = context.withHeredocs(withHeredocAt(context.heredocs, input, 0))
     return context.withMode(modeAfter(term, input, 0, context.mode))
   },
   reduce(context, term) {
@@ -275,6 +371,7 @@ export const trackContext = new ContextTracker<Context>({
       term = buffer[index]
       offset += buffer[index + 1]
     }
+    context = context.withHeredocs(heredocsAfter(node, input, context.heredocs))
     if (skippedTerms.has(term)) return context
     // What comes before a trailing `++` in a reused node is a term.
     return context.withMode(modeAfter(term, input, offset, Mode.AfterTerm))
@@ -404,6 +501,8 @@ interface Opening {
   kind: "raw" | "interpolating" | "regex" | "substitution"
   // Whether a backslash escapes the next character.
   escapes: boolean
+  // Whether the adverbs make it a heredoc: q:to/END/
+  heredoc?: boolean
 }
 
 const quoteWords: {[name: string]: Opening["kind"]} = {
@@ -419,29 +518,33 @@ function isQuoteDelimiter(ch: number) {
     ch == Ch.Percent || ch == Ch.At || ch == Ch.DoubleQuote || ch == Ch.Apostrophe
 }
 
-// Reads the start of a quote at the current position: a quote character,
-// or a quote word (q, qq, m, s, ...) with its adverbs and its delimiter.
-function readOpening(input: InputStream): Opening | null {
-  let next = input.next
-  if (next == Ch.DoubleQuote) return {open: next, close: next, count: 1, start: 1, kind: "interpolating", escapes: true}
-  if (next == Ch.Apostrophe) return {open: next, close: next, count: 1, start: 1, kind: "raw", escapes: true}
-  if (next == 0x201c /* “ */) return {open: next, close: 0x201d, count: 1, start: 1, kind: "interpolating", escapes: true}
-  if (next == 0x2018 /* ‘ */) return {open: next, close: 0x2019, count: 1, start: 1, kind: "raw", escapes: true}
-  if (next == 0x300c /* 「 */) return {open: next, close: 0x300d, count: 1, start: 1, kind: "raw", escapes: false}
+// Reads the start of a quote at offset `at`: a quote character, or a
+// quote word (q, qq, m, s, ...) with its adverbs and its delimiter.
+// The offsets in the result count from the current position.
+function readOpening(input: InputStream, at = 0): Opening | null {
+  let next = input.peek(at), start = at + 1
+  if (next == Ch.DoubleQuote) return {open: next, close: next, count: 1, start, kind: "interpolating", escapes: true}
+  if (next == Ch.Apostrophe) return {open: next, close: next, count: 1, start, kind: "raw", escapes: true}
+  if (next == 0x201c /* “ */) return {open: next, close: 0x201d, count: 1, start, kind: "interpolating", escapes: true}
+  if (next == 0x2018 /* ‘ */) return {open: next, close: 0x2019, count: 1, start, kind: "raw", escapes: true}
+  if (next == 0x300c /* 「 */) return {open: next, close: 0x300d, count: 1, start, kind: "raw", escapes: false}
   if (!isAsciiLetter(next)) return null
 
-  let pos = 1
+  let pos = at + 1
   while (isAsciiLetter(input.peek(pos))) pos++
-  if (pos > 4) return null
-  let name = word(input, 0, pos), kind = quoteWords[name]
+  if (pos - at > 4) return null
+  let name = word(input, at, pos), kind = quoteWords[name]
   if (!kind) return null
 
   // Adverbs: :w, :to, :g, :x(2)
-  let adverbs = false
+  let adverbs = false, heredoc = false
   while (input.peek(pos) == Ch.Colon && (isAsciiLetter(input.peek(pos + 1)) || input.peek(pos + 1) == Ch.Bang)) {
     adverbs = true
+    let negated = input.peek(pos + 1) == Ch.Bang, adverbStart = pos + (negated ? 2 : 1)
     pos += 2
     while (isAsciiLetter(input.peek(pos)) || isDigit(input.peek(pos))) pos++
+    let adverb = word(input, adverbStart, pos)
+    if (!negated && (adverb == "to" || adverb == "heredoc") && (kind == "raw" || kind == "interpolating")) heredoc = true
     if (input.peek(pos) == Ch.ParenOpen) {
       while (input.peek(pos) != Ch.ParenClose) {
         if (input.peek(pos) < 0 || input.peek(pos) == Ch.Newline) return null
@@ -464,7 +567,7 @@ function readOpening(input: InputStream): Opening | null {
   if (open == Ch.ParenOpen && !adverbs) return null
   let count = 1
   if (close != open) while (input.peek(pos + count) == open) count++
-  return {open, close, count, start: pos + count, kind, escapes: name.charCodeAt(0) != Ch.Q}
+  return {open, close, count, start: pos + count, kind, escapes: name.charCodeAt(0) != Ch.Q, heredoc}
 }
 
 // The offset after the delimiter that closes a quote whose content
@@ -689,32 +792,16 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
 // The text of a heredoc: the lines after the one that holds its opener,
 // up to the line that holds only its terminator. As a skipped token, it
 // leaves the rest of the opener's line to be parsed as usual. The
-// opener is looked up in the text of that line rather than kept in the
-// context, so that it is also found when the line's nodes were reused
-// from an earlier parse.
-export const heredocToken = new ExternalTokenizer(input => {
+// context holds the terminators of the heredocs that the line opened.
+export const heredocToken = new ExternalTokenizer((input, stack) => {
+  let {heredocs} = context(stack)
+  if (!heredocs.length) return
   let pos = blanksEnd(input, 0)
   if (input.peek(pos) != Ch.Newline) return
-  // Read the line that just ended, and look for heredoc openers in it.
-  let lineStart = 0
-  while (lineStart > -500 && input.peek(lineStart - 1) >= 0 && input.peek(lineStart - 1) != Ch.Newline) lineStart--
-  let line = word(input, lineStart, 0)
-  if (line.indexOf(":to") < 0 && line.indexOf(":heredoc") < 0 || /^\s*#/.test(line)) return
-  let opener = /(?:^|[^\w$@%&.'-])[qQ]\w*(?::\w+)*:(?:to|heredoc)(?::\w+)*\s*(\S)/g, found: RegExpExecArray | null
-  let terminators: string[] = []
-  while (found = opener.exec(line)) {
-    let open = found[1], close = String.fromCharCode(brackets[open.charCodeAt(0)] || open.charCodeAt(0))
-    let end = line.indexOf(close, opener.lastIndex)
-    if (end < 0) continue
-    terminators.push(line.slice(opener.lastIndex, end).trim())
-    opener.lastIndex = end + 1
-  }
-  if (!terminators.length) return
   input.advance(pos)
-  for (let terminator of terminators) {
+  for (let terminator of heredocs) {
     for (;;) {
-      // Without its terminator, this is not taken to be a heredoc. The
-      // opener is found by its text, and may be in a comment or a string.
+      // Without its terminator, this is not taken to be a heredoc.
       if (input.next < 0) return
       input.advance()
       if (lineStartsWith(input, terminator) && isLineEnd(input, terminator.length)) {
