@@ -94,7 +94,8 @@ class Gatherer {
         let label = this.text(child)
         // An operator is not called by its name: infix:<+>
         if (/:[<«\[]/.test(label)) continue
-        if (kind == "sub") this.names.push({label, type: "function", boost: 1}, variable("&" + label))
+        // `multi foo` has no declarator, and declares a sub.
+        if (kind == "sub" || kind == "RoutineName") this.names.push({label, type: "function", boost: 1}, variable("&" + label))
         // A private method is called as self!name, where nothing is completed.
         else if (/^[^!^]/.test(label)) this.methods.push({label, type: "method", boost: 1})
       } else if (name == "PackageName") {

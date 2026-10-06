@@ -63,7 +63,10 @@ PackageDeclaration {
 }
 
 RoutineDeclaration {
-  (kw<"sub"> RoutineName? | (kw<"method"> | kw<"submethod">) methodRoutineName?)
+  (kw<"sub"> RoutineName? | (kw<"method"> | kw<"submethod">) methodRoutineName? |
+   // `multi foo` without a declarator declares a sub. The `multi` is
+   // outside of this node, as it is in `multi sub foo`.
+   multiRoutineName)
   declarationTail
 }
 
@@ -84,6 +87,7 @@ PackageName { declaredName }
 RoutineName { declaredName }
 // `method !private` and `method ^meta` keep their mark in the name.
 methodRoutineName[@name=RoutineName] { declaredMethodName }
+multiRoutineName[@name=RoutineName] { multiName }
 RegexName { declaredName }
 EnumName { declaredName }
 SubsetName { declaredName }
@@ -180,6 +184,8 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 // Tokens that depend on whether a term or an operator is expected.
 @external tokens termToken from "./tokens" {
   rawString, quoteStart, Regex, plainName, wordOperator[@name=Operator],
+  // The name after `multi`, `proto` or `only`, when no declarator follows.
+  multiName,
   // &infix:<+>
   operatorVariable[@name=VariableName]
 }

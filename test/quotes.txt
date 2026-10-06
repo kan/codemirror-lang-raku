@@ -429,8 +429,8 @@ given $s { when S { say 1 } }; multi q { 1 }; multi m ($x) { }
 ==>
 
 Program(given, VariableName, Block(when, TypeName, Block(Identifier, Number)),
-  multi, Identifier, Block(Number),
-  multi, Identifier, Parens(VariableName), Block)
+  multi, RoutineDeclaration(RoutineName, Block(Number)),
+  multi, RoutineDeclaration(RoutineName, Parens(VariableName), Block))
 
 # Word lists with symbols
 

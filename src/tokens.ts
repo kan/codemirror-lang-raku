@@ -6,9 +6,9 @@ import {
   PodFormat,
   MethodName, Version, Regex, Operator, Number as NumberTerm, radixNumber, PairKey,
   VariableName, AttributeName, SpecialVariable, operatorVariable,
-  Identifier, TypeName, StringLiteral, Interpolation, self, True, False, Nil,
+  Identifier, TypeName, StringLiteral, Interpolation, self, True, False, Nil, multi, proto, only,
   PackageName, RoutineName, methodRoutineName, RegexName, EnumName, SubsetName, ConstantName,
-  methodDot, declaredName, declaredMethodName, smiley, plainName, wordOperator,
+  methodDot, declaredName, declaredMethodName, smiley, plainName, multiName, multiRoutineName, wordOperator,
   rawString, quoteStart, quoteContent, quoteNestOpen, quoteNestClose, quoteEnd,
   regexBody
 } from "./syntax.grammar.terms"
@@ -155,6 +155,9 @@ const enum Mode {
   // The last token was a closing brace. A line break after it ends the
   // statement.
   AfterBlock,
+  // The last token was `multi`, `proto` or `only`. A term is expected,
+  // and a name with a signature or a body declares a sub.
+  AfterMulti,
 }
 
 // The things that a quote can interpolate, as bits. `"…"` and qq take
@@ -259,10 +262,11 @@ for (let term of [VariableName, AttributeName, SpecialVariable, operatorVariable
                   PairKey, rawString, quoteEnd, StringLiteral, Regex, regexBody, self, True, False, Nil])
   termModes.set(term, Mode.AfterTerm)
 for (let term of [Identifier, TypeName, smiley, declaredName, declaredMethodName, PackageName, RoutineName,
-                  methodRoutineName, RegexName, EnumName, SubsetName, ConstantName])
+                  methodRoutineName, multiName, multiRoutineName, RegexName, EnumName, SubsetName, ConstantName])
   termModes.set(term, Mode.AfterName)
 // The `}` of "{...}" in a string does not take a subscript.
 for (let term of [quoteContent, Interpolation]) termModes.set(term, Mode.Term)
+for (let term of [multi, proto, only]) termModes.set(term, Mode.AfterMulti)
 
 // The mode after an operator, from its first three characters. `after`
 // is the mode before it.
@@ -443,7 +447,7 @@ function context(stack: Stack): Context { return stack.context }
 // Whether a token of `size` characters at the current position is where
 // a term starts, as opposed to an infix operator.
 function inTermPosition(input: InputStream, mode: Mode, size: number) {
-  if (mode == Mode.Term) return true
+  if (mode == Mode.Term || mode == Mode.AfterMulti) return true
   if (mode == Mode.AfterTerm) return false
   if (mode == Mode.AfterName) return isSpace(input.peek(-1)) && !isSpace(input.peek(size))
   return atLineStart(input)
@@ -897,6 +901,9 @@ function subscriptEnd(input: InputStream) {
 // with parentheses. `if(1)` and `my($x)` are not calls of this kind.
 const callableKeywords = /^(take|return|emit|next|last|redo|proceed|succeed|so|not)$/
 
+// The words that declare what follows `multi`, `proto` or `only`.
+const declarators = /^(sub|method|submethod|token|rule|regex)$/
+
 const operatorCategory = /^(infix|prefix|postfix|circumfix|postcircumfix|term)$/
 
 function isWordOperator(name: string) {
@@ -921,6 +928,15 @@ export const termToken = new ExternalTokenizer((input, stack) => {
     while (input.peek(after) == Ch.Space || input.peek(after) == Ch.Tab) after++
     if (input.peek(after) == Ch.Equals && input.peek(after + 1) == Ch.Greater)
       return input.acceptToken(plainName, end)
+    // After `multi`, `proto` or `only`, a name that is not a declarator
+    // is that of a sub: multi foo($x) { }
+    // Only with a signature or a body right after it. A name alone may
+    // be a declarator that is still being typed (`multi su`), and
+    // `only` and `proto` can be routines of one's own (`only foo, 1`).
+    if (mode == Mode.AfterMulti && !(end <= 9 && declarators.test(word(input, 0, end)))) {
+      let nameTo = categoryEnd(input, 0, end), after = input.peek(blanksEnd(input, nameTo))
+      if (after == Ch.ParenOpen || after == Ch.BraceOpen) return input.acceptToken(multiName, nameTo)
+    }
     // So is one of the keywords that are routines, when it is called
     // with parentheses: take(1). They are 2 to 7 characters long.
     if (input.peek(end) == Ch.ParenOpen && end <= 7 && callableKeywords.test(word(input, 0, end)))

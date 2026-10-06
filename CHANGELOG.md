@@ -2,6 +2,9 @@
 
 ### New features
 
+- `multi foo(…) { }`, `proto foo(…) {*}` and `only foo(…) { }`, without the
+  word `sub`, are `RoutineDeclaration` nodes with a `RoutineName`. The
+  node has no declarator keyword, and `multi` is the node before it.
 - Pod blocks have child nodes for their directives (`PodDirective`),
   headings (`PodHeading`) and formatting codes (`PodStrong`,
   `PodEmphasis`, `PodCode`, `PodLink`, `PodFormat`), which are highlighted.

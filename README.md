@@ -86,7 +86,7 @@ on incomplete code.
 | Node | Covers |
 |---|---|
 | `PackageDeclaration` | `class`, `role`, `grammar`, `module`, `package`, with a `PackageName` child, up to the body `Block` or the `;` of a `unit` declaration |
-| `RoutineDeclaration` | `sub`, `method`, `submethod`, with a `RoutineName` child (absent for anonymous routines), up to the body `Block` |
+| `RoutineDeclaration` | `sub`, `method`, `submethod`, with a `RoutineName` child (absent for anonymous routines), up to the body `Block`. Also the `foo(…) { }` of `multi foo(…) { }`, which declares a sub without the word `sub`: that node starts with its `RoutineName` |
 | `RegexDeclaration` | `token`, `rule`, `regex`, with a `RegexName` child, up to the body `Block`, which holds one `Regex` |
 | `EnumDeclaration`, `SubsetDeclaration`, `ConstantDeclaration` | The declarator and its `EnumName`, `SubsetName` or `ConstantName` |
 | `Block`, `Parens`, `Brackets` | `{ }`, `( )`, `[ ]` |
@@ -98,8 +98,10 @@ on incomplete code.
 | `Pod` | `=begin` … `=end` and the other Pod blocks. Its children are `PodDirective` (`=begin`, `=head1`, `=end pod`), `PodHeading` (the text after `=head1`), and the formatting codes `PodStrong` (`B<…>`), `PodEmphasis` (`I<…>`), `PodCode` (`C<…>`), `PodLink` (`L<…>`) and `PodFormat` (the others) |
 
 Each declarator keyword is a child node named after the keyword (`class`,
-`sub`, `token`, …). The words `unit`, `multi`, `proto`, `my` and `our` are
-not part of the declaration node. They are the nodes right before it.
+`sub`, `token`, …). The words `unit`, `multi`, `proto`, `only`, `my` and
+`our` are not part of the declaration node. They are the nodes right
+before it, also in `multi foo(…) { }`, where the declaration node has no
+declarator keyword.
 
 ## Known limitations
 
@@ -129,8 +131,6 @@ Not supported yet:
 - The brackets of a block comment are picked for the `toggleBlockComment`
   command. Text that unbalances every bracket that is tried gets
   `` #`( `` … `)`, which then does not cover exactly that text.
-- `multi`, `proto` and `only` declarations without `sub` or `method` are
-  not declaration nodes.
 - A user-defined operator is recognized where it is declared
   (`sub infix:<+++>`) and as a routine (`&infix:<+++>`), not where it is
   used as an operator.
@@ -166,6 +166,10 @@ Heuristics that can be wrong:
   `q {…}` with a space is not a quote.
 - `%name` and `&name` are variables, except between two terms with no
   space on either side: `$a%b`.
+- After `multi`, `proto` or `only`, a name is taken to declare a sub when
+  a `(` or a `{` follows it: `multi foo($x) { }`. A signature that starts
+  on the next line is not seen, and a call such as `only foo(1)`, of a
+  routine of your own that is named `only`, is read as a declaration.
 - A word spelled like a keyword is a keyword wherever it appears, except
   as a method name, as a declared name, before `=>`, and for the
   keywords that are routines (`take`, `return`, `next`, `not`, …) right

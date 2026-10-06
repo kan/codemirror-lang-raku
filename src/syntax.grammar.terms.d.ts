@@ -7,10 +7,10 @@ export declare const
   radixNumber: number, PairKey: number,
   VariableName: number, AttributeName: number, SpecialVariable: number, operatorVariable: number,
   Identifier: number, TypeName: number, StringLiteral: number, Interpolation: number,
-  self: number, True: number, False: number, Nil: number,
+  self: number, True: number, False: number, Nil: number, multi: number, proto: number, only: number,
   PackageName: number, RoutineName: number, methodRoutineName: number, RegexName: number,
   EnumName: number, SubsetName: number, ConstantName: number,
   methodDot: number, declaredName: number, declaredMethodName: number, smiley: number,
-  plainName: number, wordOperator: number,
+  plainName: number, multiName: number, multiRoutineName: number, wordOperator: number,
   rawString: number, quoteStart: number, quoteContent: number, quoteNestOpen: number,
   quoteNestClose: number, quoteEnd: number, regexBody: number

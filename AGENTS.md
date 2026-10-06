@@ -109,6 +109,7 @@ export すると、`dist/index.d.ts` が tarball に無い `./complete` など�
 | `AfterTerm` | 変数、数値、文字列、`)`、`]`、メソッド名、後置の `++` と `--`、引数を取らない組み込みの項（`pi`、`tau`、`now`、`time`、`rand`） | 演算子 |
 | `AfterName` | 裸の名前（`say`、`foo`）、型名、宣言名、単独の `*` | 前に空白があり後ろに無ければ項（`say /x/`）。それ以外は演算子（`foo / 2`） |
 | `AfterBlock` | `}` | あいだに改行があれば項。無ければ演算子 |
+| `AfterMulti` | `multi`、`proto`、`only` | `Term` と同じ。加えて、`(` か `{` が続く名前を sub の宣言の名前（`multiName`）として読む |
 
 `trackContext` は、補間する引用（`"…"`、`qq[…]`、`q:c[…]`）の区切り文字、入れ子の深さ、何を補間するか
 （`Interpolate` のビット。副詞 `:c` や `:!s` で変わる）も持つ。補間のたびに
@@ -147,7 +148,10 @@ Pike のアウトラインが依存するので、**次のノード名と親子�
 - それぞれの名前ノード `PackageName` / `RoutineName` / `RegexName` / `EnumName` / `SubsetName` /
   `ConstantName`（無名の宣言では存在しない）
 - 宣言子のキーワードは、綴りと同じ名前の子ノードになる（`class`、`sub`、`token` など）
-- `unit` / `multi` / `proto` / `my` / `our` は宣言ノードの外にある、直前の兄弟ノード
+- `unit` / `multi` / `proto` / `only` / `my` / `our` は宣言ノードの外にある、直前の兄弟ノード
+- `sub` を省いた `multi foo($x) { }` は、`multi` のあとに、宣言子のキーワードを持たない
+  `RoutineDeclaration(RoutineName, …)` が続く。この形だけ、最初の子が `RoutineName` になる
+  （2026-10-07 にユーザーが決定）
 - `PackageDeclaration` は本体の `Block` か、`unit class Foo;` の `;` で終わる
 - `RegexDeclaration` の本体の `Block` は、中身が `Regex` 1 個（空なら 0 個）になる
 

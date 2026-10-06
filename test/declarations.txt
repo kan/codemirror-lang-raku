@@ -62,6 +62,53 @@ Program(my, VariableName, Operator,
 
 # Multi
 
+multi foo(Int $x) { }
+proto bar(|) {*}
+only baz { 1 }
+multi infix:<+++>($a, $b) { }
+multi sub qux() { }; multi method m() { }; proto token t {*}
+
+==>
+
+Program(
+  multi, RoutineDeclaration(RoutineName, Parens(TypeName, VariableName), Block),
+  proto, RoutineDeclaration(RoutineName, Parens(Operator), Block(Operator)),
+  only, RoutineDeclaration(RoutineName, Block(Number)),
+  multi, RoutineDeclaration(RoutineName, Parens(VariableName, VariableName), Block),
+  multi, RoutineDeclaration(sub, RoutineName, Parens, Block),
+  multi, RoutineDeclaration(method, RoutineName, Parens, Block),
+  proto, RegexDeclaration(token, RegexName, Block(Regex)))
+
+# Words like multi that do not declare
+
+my %h = only => 1, proto => 2; say %h<multi>; $x.only; say $proto, $only;
+my $multi = 3; f(:only, :!proto); multi; proto;
+is only foo, 'x'; multi su; multi macro foo() { }
+
+==>
+
+Program(my, VariableName, Operator, Identifier, Operator, Number, Identifier, Operator, Number,
+  Identifier, VariableName, StringLiteral, VariableName, MethodCall(MethodName),
+  Identifier, VariableName, VariableName,
+  my, VariableName, Operator, Number, Identifier, Parens(PairKey, PairKey), multi, proto,
+  is, only, Identifier, StringLiteral, multi, Identifier, multi, Identifier, Identifier, Parens, Block)
+
+# A line break or a comment between multi and the name
+
+multi
+foo($x) { }
+multi #`(c) bar() { } # d
+proto # e
+  baz(|) {*}
+
+==>
+
+Program(multi, RoutineDeclaration(RoutineName, Parens(VariableName), Block),
+  multi, BlockComment, RoutineDeclaration(RoutineName, Parens, Block), LineComment,
+  proto, LineComment, RoutineDeclaration(RoutineName, Parens(Operator), Block(Operator)))
+
+# Multi with a declarator
+
 multi sub foo(Int $x) { } proto method bar(|) { }
 
 ==>

@@ -671,6 +671,8 @@ sub other($elsewhere) { my $inner; state $kept }
     assert.deepStrictEqual(complete(code + "my Sha|"), ["Shade"])
     assert.deepStrictEqual(complete(code + "my Sma|"), ["Small"])
     assert.deepStrictEqual(complete(code + "spi|"), [])
+    assert.deepStrictEqual(complete("multi many-forms($x) { }; many|"), ["many-forms"])
+    assert.deepStrictEqual(complete("multi many-forms($arg) { say $| }"), ["$arg"])
     assert.deepStrictEqual(complete("sub a { sub nested-one { } }; nested|"), [])
     assert.deepStrictEqual(complete("sub a { sub nested-one { }; nested| }"), ["nested-one"])
   })

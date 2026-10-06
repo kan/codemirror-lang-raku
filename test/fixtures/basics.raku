@@ -49,6 +49,10 @@ sub is-low(Item $item, Int :$threshold = 5 --> Bool) is export {
 multi sub describe(Item:D $item) { $item.gist }
 multi sub describe(Any:U $) { 'nothing' }
 
+proto label(|) {*}
+multi label(Item:D $item) { "item { $item.name }" }
+multi label(Str:D $text) { "text $text" }
+
 #`(
   An embedded comment, with (nested) brackets,
   that spans several lines.
