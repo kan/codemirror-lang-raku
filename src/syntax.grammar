@@ -24,6 +24,7 @@ nonBlock {
   ConstantDeclaration |
   MethodCall |
   VariableName |
+  operatorVariable |
   AttributeName |
   SpecialVariable |
   Identifier |
@@ -159,7 +160,9 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 @external tokens quoteToken from "./tokens" { quoteContent, quoteNestOpen, quoteNestClose, quoteEnd }
 // Tokens that depend on whether a term or an operator is expected.
 @external tokens termToken from "./tokens" {
-  rawString, quoteStart, Regex, fatArrowKey, wordOperator[@name=Operator]
+  rawString, quoteStart, Regex, fatArrowKey, wordOperator[@name=Operator],
+  // &infix:<+>
+  operatorVariable[@name=VariableName]
 }
 
 @tokens {

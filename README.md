@@ -111,8 +111,9 @@ Not supported yet:
   account.
 - `multi`, `proto` and `only` declarations without `sub` or `method` are
   not declaration nodes.
-- User-defined operators are recognized where they are declared
-  (`sub infix:<+++>`), not as `&infix:<+++>`.
+- A user-defined operator is recognized where it is declared
+  (`sub infix:<+++>`) and as a routine (`&infix:<+++>`), not where it is
+  used as an operator.
 - Indentation follows brackets only. A statement continued on the next
   line is not indented further.
 - Completion offers a fixed list of names. It does not offer the

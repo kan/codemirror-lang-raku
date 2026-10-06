@@ -1,3 +1,14 @@
+# An operator name that is not closed
+
+sub infix:<+ ($a, $b) { $a > $b }
+say 1;
+sub infix:<- ($a,$b){$a>$b}
+
+==>
+
+Program(RoutineDeclaration(sub, RoutineName, StringLiteral, VariableName, ⚠, Identifier, Number),
+  RoutineDeclaration(sub, RoutineName, StringLiteral, VariableName, Block(⚠)))
+
 # Unclosed block
 
 sub foo {

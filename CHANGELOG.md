@@ -1,5 +1,11 @@
 ## Unreleased
 
+### New features
+
+- An operator referred to as a routine, as in `&infix:<+>`, is a single
+  `VariableName`. Operator names can also be written as `circumfix:<[ ]>`
+  and `infix:['+']`.
+
 ### Bug fixes
 
 - A heredoc opener that is only mentioned in a string or in a comment no

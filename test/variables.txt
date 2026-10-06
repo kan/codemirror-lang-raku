@@ -102,3 +102,39 @@ my $ = 1; @($x)
 ==>
 
 Program(my, Operator, Number, Parens(VariableName))
+
+# A user-defined operator as a routine
+
+&infix:<+>(1, 2); my &plus = &infix:<+++>; &prefix:<->($x), &postfix:«!»
+
+==>
+
+Program(VariableName, Parens(Number, Number),
+  my, VariableName, Operator, VariableName,
+  VariableName, Parens(VariableName), VariableName)
+
+# Other forms of an operator's name
+
+&infix:['+'](1, 2); &circumfix:<[ ]>; &term:<now>; &postcircumfix:<{ }>
+
+==>
+
+Program(VariableName, Parens(Number, Number), VariableName, VariableName, VariableName)
+
+# An operator's name in brackets
+
+@a[&infix:["+"]]; [[&infix:['-']]]; &postcircumfix:["[ ]"]; &infix:[']']; &infix:[$op]
+
+==>
+
+Program(VariableName, Brackets(VariableName), Brackets(Brackets(VariableName)), VariableName, VariableName,
+  VariableName, Brackets(VariableName))
+
+# A routine that is not an operator
+
+&infix; &infix:foo; &other:<x>; $a&infix:<+>
+
+==>
+
+Program(VariableName, VariableName, PairKey, VariableName, StringLiteral, VariableName, Operator, Identifier,
+  StringLiteral)

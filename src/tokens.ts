@@ -3,7 +3,7 @@ import {Tree, TreeBuffer} from "@lezer/common"
 import {
   BlockComment, DocComment, LineComment, Pod, Heredoc,
   MethodName, Version, Regex, Operator, Number as NumberTerm, radixNumber, PairKey,
-  VariableName, AttributeName, SpecialVariable,
+  VariableName, AttributeName, SpecialVariable, operatorVariable,
   Identifier, TypeName, StringLiteral, Interpolation, self, True, False, Nil,
   PackageName, RoutineName, methodRoutineName, RegexName, EnumName, SubsetName, ConstantName,
   methodDot, declaredName, declaredMethodName, smiley, fatArrowKey, wordOperator,
@@ -203,7 +203,7 @@ class Context {
 // it. Shifting a token and reusing a node both look here, so that they
 // agree.
 const termModes = new Map<number, Mode>()
-for (let term of [VariableName, AttributeName, SpecialVariable, NumberTerm, radixNumber, Version, MethodName,
+for (let term of [VariableName, AttributeName, SpecialVariable, operatorVariable, NumberTerm, radixNumber, Version, MethodName,
                   PairKey, rawString, quoteEnd, StringLiteral, Regex, regexBody, self, True, False, Nil])
   termModes.set(term, Mode.AfterTerm)
 for (let term of [Identifier, TypeName, smiley, declaredName, declaredMethodName, PackageName, RoutineName,
@@ -687,6 +687,8 @@ function subscriptEnd(input: InputStream) {
   return wordListEnd(input, true)
 }
 
+const operatorCategory = /^(infix|prefix|postfix|circumfix|postcircumfix|term)$/
+
 function isWordOperator(name: string) {
   return name == "x" || name == "xx" || name == "min" || name == "max" || name == "Z" || name == "X"
 }
@@ -718,7 +720,15 @@ export const termToken = new ExternalTokenizer((input, stack) => {
     // Squeezed between two terms, a sigil is the operator: $a%b. With a
     // space before it, it is a variable: `my Array[Int] %h`.
     if (mode == Mode.AfterTerm && isIdentifierStart(input.peek(1)) && !isSpace(input.peek(-1)))
-      input.acceptToken(wordOperator, 1)
+      return input.acceptToken(wordOperator, 1)
+    // An operator as a routine: &infix:<+>
+    if (next == Ch.Amp) {
+      let end = nameEnd(input, 1)
+      if (end > 0 && operatorCategory.test(word(input, 1, end))) {
+        let categoryTo = categoryEnd(input, 1, end)
+        if (categoryTo > end) input.acceptToken(operatorVariable, categoryTo)
+      }
+    }
     return
   } else if (next == Ch.Less || next == Ch.GuillemetOpen) {
     let end
@@ -845,17 +855,28 @@ export const methodDotToken = new ExternalTokenizer((input, stack) => {
   input.acceptToken(methodDot, size)
 })
 
-// The offset after an operator name's `:<...>` part, as in infix:<+>
-// and term:sym<x>, or `pos` when there is none there.
-function categoryEnd(input: InputStream, pos: number) {
+// The offset after an operator name's `:<...>` part, as in infix:<+>,
+// circumfix:<[ ]>, infix:['+'] and term:sym<x>, or `pos` when there is
+// none there. The name before it runs from `nameStart` to `pos`.
+function categoryEnd(input: InputStream, nameStart: number, pos: number) {
   if (input.peek(pos) != Ch.Colon) return pos
   let open = pos + 1
   if (word(input, open, open + 3) == "sym") open += 3
-  let close = input.peek(open) == Ch.Less ? Ch.Greater : input.peek(open) == Ch.GuillemetOpen ? Ch.GuillemetClose : -1
+  let first = input.peek(open)
+  if (first == Ch.BracketOpen) {
+    // Only a quoted operator: ['+']
+    let quote = input.peek(open + 1)
+    if (quote != Ch.Apostrophe && quote != Ch.DoubleQuote) return pos
+    let end = quotedEnd(input, open + 1)
+    return end > 0 && input.peek(end) == Ch.BracketClose ? end + 1 : pos
+  }
+  let close = first == Ch.Less ? Ch.Greater : first == Ch.GuillemetOpen ? Ch.GuillemetClose : -1
   if (close < 0) return pos
+  // The two halves of a circumfix are separated by one space.
+  let spaces = /circumfix$/.test(word(input, nameStart, pos)) ? 1 : 0
   for (let i = open + 1;; i++) {
     let ch = input.peek(i)
-    if (ch < 0 || isSpace(ch)) return pos
+    if (ch < 0 || isSpace(ch) && (ch != Ch.Space || i == open + 1 || --spaces < 0)) return pos
     // The operator itself can be `>`, so the last closer before a break counts.
     if (ch == close && !(input.peek(i + 1) == close)) return i + 1
   }
@@ -873,7 +894,7 @@ export const nameToken = new ExternalTokenizer((input, stack) => {
     if (!mark) input.acceptToken(MethodName, end)
     return
   }
-  end = categoryEnd(input, end)
+  end = categoryEnd(input, mark, end)
   if (!mark && stack.canShift(declaredName)) input.acceptToken(declaredName, end)
   else if (stack.canShift(declaredMethodName)) input.acceptToken(declaredMethodName, end)
 })
