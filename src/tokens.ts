@@ -154,6 +154,18 @@ const enum Mode {
   AfterBlock,
 }
 
+// The things that a quote can interpolate, as bits. `"…"` and qq take
+// all of them, and adverbs switch them one by one: q:c, qq:!s
+const enum Interpolate {
+  Closure = 1,
+  Scalar = 2,
+  Array = 4,
+  Hash = 8,
+  Function = 16,
+  Backslash = 32,
+  All = 63,
+}
+
 // A quote that is being read piece by piece because it interpolates.
 class Quote {
   hash: number
@@ -162,8 +174,17 @@ class Quote {
               readonly close: number,
               readonly count: number,
               // How many nested opening delimiters are unclosed.
-              readonly depth: number) {
-    this.hash = ((parent ? parent.hash * 31 : 7) + open * 5 + count * 3 + depth) | 0
+              readonly depth: number,
+              readonly interpolates: number,
+              // Whether a backslash that does not start an escape still
+              // takes the delimiter after it out of play: q:c[a \] b]
+              readonly escapes: boolean) {
+    let hash = parent ? parent.hash : 7
+    for (let part of [open, count, depth, interpolates, escapes ? 1 : 0]) hash = (hash * 31 + part) | 0
+    this.hash = hash
+  }
+  withDepth(depth: number) {
+    return new Quote(this.parent, this.open, this.close, this.count, depth, this.interpolates, this.escapes)
   }
 }
 
@@ -317,15 +338,16 @@ export const trackContext = new ContextTracker<Context>({
     switch (term) {
       case quoteStart: {
         let opening = readOpening(input)
-        return opening ? new Context(Mode.Term, new Quote(context.quote, opening.open, opening.close, opening.count, 0),
-                                     withHeredocAt(context.heredocs, input, 0))
-          : context
+        if (!opening) return context
+        let quote = new Quote(context.quote, opening.open, opening.close, opening.count, 0,
+                              opening.interpolates, opening.escapes)
+        return new Context(Mode.Term, quote, withHeredocAt(context.heredocs, input, 0))
       }
       case quoteNestOpen: case quoteNestClose: {
         let quote = context.quote
         if (!quote) return context
         let depth = quote.depth + (term == quoteNestOpen ? 1 : -1)
-        return new Context(Mode.Term, new Quote(quote.parent, quote.open, quote.close, quote.count, depth), context.heredocs)
+        return new Context(Mode.Term, quote.withDepth(depth), context.heredocs)
       }
       case quoteEnd:
         return new Context(Mode.AfterTerm, context.quote && context.quote.parent, context.heredocs)
@@ -499,6 +521,8 @@ interface Opening {
   // The offset of the first character after the opening delimiter.
   start: number
   kind: "raw" | "interpolating" | "regex" | "substitution"
+  // What it interpolates, as Interpolate bits. Zero for the "raw" kind.
+  interpolates: number
   // Whether a backslash escapes the next character.
   escapes: boolean
   // Whether the adverbs make it a heredoc: q:to/END/
@@ -512,6 +536,22 @@ const quoteWords: {[name: string]: Opening["kind"]} = {
   s: "substitution", ss: "substitution", S: "substitution", tr: "substitution", TR: "substitution"
 }
 
+// The kinds of interpolation that the adverbs of a quote switch.
+const interpolationAdverbs = new Map<string, number>([
+  ["c", Interpolate.Closure], ["closure", Interpolate.Closure],
+  ["s", Interpolate.Scalar], ["scalar", Interpolate.Scalar],
+  ["a", Interpolate.Array], ["array", Interpolate.Array],
+  ["h", Interpolate.Hash], ["hash", Interpolate.Hash],
+  ["f", Interpolate.Function], ["function", Interpolate.Function],
+  ["b", Interpolate.Backslash], ["backslash", Interpolate.Backslash],
+  ["qq", Interpolate.All], ["double", Interpolate.All]
+])
+
+// The opening of a quote that starts with a quote character at offset `at`.
+function quoteCharOpening(open: number, close: number, at: number, interpolates: number, escapes = true): Opening {
+  return {open, close, count: 1, start: at + 1, kind: interpolates ? "interpolating" : "raw", interpolates, escapes}
+}
+
 // The delimiters, other than brackets, that are accepted after a quote word.
 function isQuoteDelimiter(ch: number) {
   return ch == Ch.Slash || ch == Ch.Bang || ch == Ch.Pipe || ch == Ch.Tilde || ch == Ch.Caret ||
@@ -522,12 +562,12 @@ function isQuoteDelimiter(ch: number) {
 // quote word (q, qq, m, s, ...) with its adverbs and its delimiter.
 // The offsets in the result count from the current position.
 function readOpening(input: InputStream, at = 0): Opening | null {
-  let next = input.peek(at), start = at + 1
-  if (next == Ch.DoubleQuote) return {open: next, close: next, count: 1, start, kind: "interpolating", escapes: true}
-  if (next == Ch.Apostrophe) return {open: next, close: next, count: 1, start, kind: "raw", escapes: true}
-  if (next == 0x201c /* “ */) return {open: next, close: 0x201d, count: 1, start, kind: "interpolating", escapes: true}
-  if (next == 0x2018 /* ‘ */) return {open: next, close: 0x2019, count: 1, start, kind: "raw", escapes: true}
-  if (next == 0x300c /* 「 */) return {open: next, close: 0x300d, count: 1, start, kind: "raw", escapes: false}
+  let next = input.peek(at)
+  if (next == Ch.DoubleQuote) return quoteCharOpening(next, next, at, Interpolate.All)
+  if (next == Ch.Apostrophe) return quoteCharOpening(next, next, at, 0)
+  if (next == 0x201c /* “ */) return quoteCharOpening(next, 0x201d, at, Interpolate.All)
+  if (next == 0x2018 /* ‘ */) return quoteCharOpening(next, 0x2019, at, 0)
+  if (next == 0x300c /* 「 */) return quoteCharOpening(next, 0x300d, at, 0, false)
   if (!isAsciiLetter(next)) return null
 
   let pos = at + 1
@@ -536,15 +576,25 @@ function readOpening(input: InputStream, at = 0): Opening | null {
   let name = word(input, at, pos), kind = quoteWords[name]
   if (!kind) return null
 
-  // Adverbs: :w, :to, :g, :x(2)
-  let adverbs = false, heredoc = false
+  // Adverbs: :w, :to, :g, :x(2). Those of a regex mean other things
+  // than those of a quote: m:s/a b/
+  let adverbs = false, heredoc = false, isQuote = kind == "raw" || kind == "interpolating"
+  let interpolates = kind == "interpolating" ? Interpolate.All : 0
+  // Whether a backslash escapes the delimiter, apart from the escapes
+  // of :b. That comes with q and its :q adverb: Q and qq:!b have none.
+  let escapes = isQuote ? kind == "raw" && next == Ch.q : true
   while (input.peek(pos) == Ch.Colon && (isAsciiLetter(input.peek(pos + 1)) || input.peek(pos + 1) == Ch.Bang)) {
     adverbs = true
     let negated = input.peek(pos + 1) == Ch.Bang, adverbStart = pos + (negated ? 2 : 1)
     pos += 2
     while (isAsciiLetter(input.peek(pos)) || isDigit(input.peek(pos))) pos++
     let adverb = word(input, adverbStart, pos)
-    if (!negated && (adverb == "to" || adverb == "heredoc") && (kind == "raw" || kind == "interpolating")) heredoc = true
+    if (isQuote) {
+      let bits = interpolationAdverbs.get(adverb)
+      if (bits != null) interpolates = negated ? interpolates & ~bits : interpolates | bits
+      else if (!negated && (adverb == "q" || adverb == "single")) escapes = true
+      else if (!negated && (adverb == "to" || adverb == "heredoc")) heredoc = true
+    }
     if (input.peek(pos) == Ch.ParenOpen) {
       while (input.peek(pos) != Ch.ParenClose) {
         if (input.peek(pos) < 0 || input.peek(pos) == Ch.Newline) return null
@@ -567,7 +617,9 @@ function readOpening(input: InputStream, at = 0): Opening | null {
   if (open == Ch.ParenOpen && !adverbs) return null
   let count = 1
   if (close != open) while (input.peek(pos + count) == open) count++
-  return {open, close, count, start: pos + count, kind, escapes: name.charCodeAt(0) != Ch.Q, heredoc}
+  if (isQuote) kind = interpolates ? "interpolating" : "raw"
+  if (interpolates & Interpolate.Backslash) escapes = true
+  return {open, close, count, start: pos + count, kind, interpolates, escapes, heredoc}
 }
 
 // The offset after the delimiter that closes a quote whose content
@@ -771,7 +823,7 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
   if (!stack.canShift(quoteEnd)) return
   let {quote, mode} = context(stack)
   if (!quote) return
-  let {open, close, count} = quote, nests = open != close
+  let {open, close, count, interpolates} = quote, nests = open != close
   // After a variable, a subscript or a call continues the interpolation.
   // `[` and `(` are left to the grammar's own tokens.
   if (mode == Mode.AfterTerm) {
@@ -789,8 +841,17 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
       input.advance(count)
       return input.acceptToken(!atClose ? quoteNestOpen : quote.depth ? quoteNestClose : quoteEnd)
     }
-    if (next == Ch.Backslash || next == Ch.Dollar || next == Ch.BraceOpen) break
-    if (next == Ch.At || next == Ch.Percent || next == Ch.Amp) {
+    if (next == Ch.Backslash) {
+      if (interpolates & Interpolate.Backslash) break
+      // Still keeps a delimiter after it from closing the quote.
+      if (quote.escapes && input.peek(1) >= 0) input.advance()
+    } else if (next == Ch.Dollar) {
+      if (interpolates & Interpolate.Scalar) break
+    } else if (next == Ch.BraceOpen) {
+      if (interpolates & Interpolate.Closure) break
+    } else if (next == Ch.At && interpolates & Interpolate.Array ||
+               next == Ch.Percent && interpolates & Interpolate.Hash ||
+               next == Ch.Amp && interpolates & Interpolate.Function) {
       let end = nameEnd(input, 1)
       if (end > 0 && hasPostfix(input, end)) break
     }

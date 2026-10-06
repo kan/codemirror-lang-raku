@@ -106,9 +106,8 @@ Not supported yet:
   including any code blocks in it.
 - Nothing is highlighted inside a heredoc, a `<<…>>` / `«…»` word list or
   a Pod block: no interpolation, no Pod formatting codes.
-- Only `"…"` and the `qq` forms interpolate. Adverbs that switch
-  interpolation on or off (`q:c`, `q:s`, `qq:!c`) are not taken into
-  account.
+- A quote adverb that is switched off through its argument, as in
+  `qq:c(False)[…]`, counts as switched on.
 - `multi`, `proto` and `only` declarations without `sub` or `method` are
   not declaration nodes.
 - A user-defined operator is recognized where it is declared

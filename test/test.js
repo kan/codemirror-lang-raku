@@ -146,7 +146,7 @@ function tokens(tree) {
 }
 
 describe("incremental parsing", () => {
-  let snippets = ['"', "'", "{", "}", "(", ")", "[", "]", "<", ">", "/", "#", "$x", " ", "\n", ";", "q", "qq[",
+  let snippets = ['"', "'", "{", "}", "(", ")", "[", "]", "<", ">", "/", "#", "$x", " ", "\n", ";", "q", "qq[", "q:c[", ":!s",
                   "=begin pod\n", "=end pod\n", ":to/END/", "END\n", "token ", "\\", "x ", "%h", ".", "=>", "~~ "]
   let dir = path.join(caseDir, "fixtures")
   for (let file of fs.readdirSync(dir)) {

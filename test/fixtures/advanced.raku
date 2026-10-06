@@ -91,6 +91,11 @@ my $hex = :16<FF> + 0x10;
 say $half < 3 ?? 'small' !! 'big';
 say <a b c>.elems, ' ', (%*ENV<HOME> // '~');
 
+# Quotes whose adverbs switch kinds of interpolation on and off.
+my &plus = &infix:<+++>;
+say q:c[sum: { plus(1, 2) } costs $5.00 \] ], qq:!c{ a {literal} block, $n times };
+say q:s:b"$hex\t@not-an-array", Q:closure<{ $n * 2 } is not $half>, qq:!s:!b[10$ \n];
+
 =finish
 
 Anything after =finish is documentation: { ' " /

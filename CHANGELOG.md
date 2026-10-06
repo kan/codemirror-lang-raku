@@ -2,6 +2,10 @@
 
 ### New features
 
+- The adverbs of a quote that switch kinds of interpolation on and off
+  are taken into account: `q:c{…}` interpolates blocks, `qq:!s[…]` does
+  not interpolate `$` variables. This covers `:c`, `:s`, `:a`, `:h`, `:f`,
+  `:b`, `:qq`, `:q` and their long names.
 - An operator referred to as a routine, as in `&infix:<+>`, is a single
   `VariableName`. Operator names can also be written as `circumfix:<[ ]>`
   and `infix:['+']`.

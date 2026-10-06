@@ -50,6 +50,72 @@ qq[a [$b] c], qq{a {$b} c}, 1
 
 Program(StringLiteral(VariableName), StringLiteral(VariableName), Number)
 
+# Adverbs that switch one kind of interpolation on
+
+q:c[a {1} $x \n], q:s[a {1} $x @y[0]], q:a[$x @y[0] %h<k>], q:h[@y[0] %h<k>], q:f[$x &f(1)], q:b[a\n {1} $x]
+
+==>
+
+Program(
+  StringLiteral(Interpolation(Number)),
+  StringLiteral(VariableName),
+  StringLiteral(VariableName, Brackets(Number)),
+  StringLiteral(VariableName),
+  StringLiteral(VariableName, Parens(Number)),
+  StringLiteral(Escape))
+
+# Adverbs that switch one kind of interpolation off
+
+qq:!c[a {1} $x], qq:!s[a {1} $x], qq:!b[a\n $x], qq:!s:!c:!a:!h:!f:!b[a {1} $x \n], 1
+
+==>
+
+Program(
+  StringLiteral(VariableName),
+  StringLiteral(Interpolation(Number)),
+  StringLiteral(VariableName),
+  StringLiteral,
+  Number)
+
+# Long adverb names, and adverbs that set all kinds at once
+
+q:closure:scalar[{1} $x @y[0]], q:qq[{1} $x], q:double[\n], Q:c:b[\n {1}], q:w:c[a {1}], Q:c:q[a {1}]
+
+==>
+
+Program(
+  StringLiteral(Interpolation(Number), VariableName),
+  StringLiteral(Interpolation(Number), VariableName),
+  StringLiteral(Escape),
+  StringLiteral(Escape, Interpolation(Number)),
+  StringLiteral(Interpolation(Number)),
+  StringLiteral(Interpolation(Number)))
+
+# A backslash before the delimiter, in quotes with and without escapes
+
+qq:!b[C:\dir\], Q:q[a \] b], Q:!q[a \], Q:!qq[a \], qq:!b[\$x], q:c[a \] {1}], 1
+
+==>
+
+Program(StringLiteral, StringLiteral, StringLiteral, StringLiteral, StringLiteral(VariableName),
+  StringLiteral(Interpolation(Number)), Number)
+
+# An escaped delimiter in a quote that only interpolates blocks
+
+q:c[a \] {1} b], q:c{a \} {1} b}, Q:c[a \], 1
+
+==>
+
+Program(StringLiteral(Interpolation(Number)), StringLiteral, StringLiteral, Number)
+
+# Adverbs of a regex are not about interpolation
+
+m:s/a b/, s:g/a/b/, rx:i/a/, 1
+
+==>
+
+Program(Regex, Regex, Regex, Number)
+
 # Adverbs and short forms
 
 qw<a b>, qww<a 'b c'>, qx{ls}, qqx{ls $dir}, q:w/a b/, qq:x/ls/, Q:b/x/
