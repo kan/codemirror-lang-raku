@@ -113,8 +113,6 @@ Not supported yet:
 - A user-defined operator is recognized where it is declared
   (`sub infix:<+++>`) and as a routine (`&infix:<+++>`), not where it is
   used as an operator.
-- Indentation follows brackets only. A statement continued on the next
-  line is not indented further.
 - Completion offers a fixed list of names. It does not offer the
   variables, routines and classes of the document, and after a `.` it
   offers the same methods whatever the type of the invocant. In a
@@ -126,6 +124,12 @@ Not supported yet:
 
 Heuristics that can be wrong:
 
+- A line is indented as the continuation of a statement when the line
+  before it ends in an operator or a comma, or when it starts with a
+  method call or with an operator that has a space after it. A statement
+  that continues in another way, as in a trait on its own line
+  (`sub f($a)` / `is export {`), is not indented further. Inside `( )`
+  and `[ ]`, indentation follows the brackets only.
 - A capitalized word is taken to be a type name.
 - Whether `/` starts a regex and `<` starts a word list is decided from
   the token before it. After a bare name, spacing decides: `say /x/` and

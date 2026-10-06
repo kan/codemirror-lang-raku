@@ -2,6 +2,9 @@
 
 ### New features
 
+- A line that continues a statement is indented one unit further: after
+  a line that ends in an operator or a comma, and when it starts with a
+  method call or an infix operator.
 - The adverbs of a quote that switch kinds of interpolation on and off
   are taken into account: `q:c{…}` interpolates blocks, `qq:!s[…]` does
   not interpolate `$` variables. This covers `:c`, `:s`, `:a`, `:h`, `:f`,

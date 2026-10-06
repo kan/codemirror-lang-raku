@@ -60,6 +60,7 @@ node -e 'import("./dist/index.js").then(m => console.log(m.rakuLanguage.parser.p
 | `src/tokens.ts` | 外部トークナイザと `ContextTracker`。正規表現で書けないトークンを切り出す |
 | `src/index.ts` | `rakuLanguage`、`rakuCompletion`、`raku()`。`styleTags`、インデント、折りたたみ、`languageData` |
 | `src/complete.ts` | 補完ソース。キーワード、組み込みの型、ルーチン、メソッド、特殊変数の固定の一覧を出す |
+| `src/indent.ts` | 文の継続行のインデント。文のノードが無いので、行の直前のトークンと行頭の文字列から継続かどうかを決める |
 | `src/keywords.ts` | キーワードの綴りとハイライト用タグの表。`index.ts` と `complete.ts` が読む |
 | `src/syntax.grammar.d.ts` | 生成されるパーサの型宣言（手書き） |
 | `src/syntax.grammar.terms.d.ts` | `tokens.ts` が使う項 ID の型宣言（手書き） |
@@ -228,7 +229,7 @@ DESIGN.md「作業フェーズ」に対する現在地。フェーズを終え�
 | 1. 雛形 | 済み |
 | 2. 基本ハイライト | 済み。コメント（行、`#|` と `#=`、`` #`( ) ``）、`'…'` と `"…"`（`$var` と `{ }` の補間）、数値、キーワード、変数、ブロック、宣言 |
 | 3. 難所対応 | 済み。クォート構文全般、heredoc、補間（添字、呼び出し、メソッド呼び出し）、正規表現、Pod、単語演算子とメタ演算子。正規表現と heredoc の中身は 1 トークンで、中は色分けしない |
-| 4. エディタ機能 | 済み。括弧のインデント、折りたたみ（ブロック、括弧、Pod、heredoc、埋め込みコメント）、括弧の対応、固定の一覧による補完。文の継続行のインデントと、文書内の名前の補完は無い |
+| 4. エディタ機能 | 済み。括弧のインデント、折りたたみ（ブロック、括弧、Pod、heredoc、埋め込みコメント）、括弧の対応、固定の一覧による補完。0.1.0 のあとに、文の継続行のインデントを足した。文書内の名前の補完は無い |
 | 5. 公開準備 | 済み。README、CHANGELOG、`demo/`、`npm pack` での中身の確認。0.1.0 を 2026-10-06 に npm へ公開した。次の版からは、CHANGELOG の先頭に `## x.y.z (unreleased)` の節を作って変更を書き、公開するときに日付へ直す |
 
 未対応の構文と、誤判定しうる箇所の一覧は README の「Known limitations」にある。対応したら

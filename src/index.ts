@@ -5,6 +5,7 @@ import {styleTags, tags as t} from "@lezer/highlight"
 import {Extension} from "@codemirror/state"
 import {rakuCompletionSource} from "./complete"
 import {keywordTags} from "./keywords"
+import {statementIndent, topIndent} from "./indent"
 
 /// The Lezer parser for Raku, without the editor-specific node props.
 export const parser: LRParser = grammarParser
@@ -16,7 +17,8 @@ export const rakuLanguage = LRLanguage.define({
   parser: parser.configure({
     props: [
       indentNodeProp.add({
-        "Block Interpolation": delimitedIndent({closing: "}"}),
+        Program: topIndent,
+        "Block Interpolation": statementIndent("}"),
         Parens: delimitedIndent({closing: ")"}),
         Brackets: delimitedIndent({closing: "]"}),
         // The lines of these are text, which keeps its indentation.

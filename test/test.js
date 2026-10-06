@@ -268,6 +268,131 @@ sub f {
   if $x {
     `))
 
+  it("indents a line that continues after an operator", keeps(`
+my $total = $price * $count +
+  $shipping;
+my $x = $a ??
+  1 !!
+  2;
+sub f {
+  return $a eq
+    $b;
+}
+say 1;`))
+
+  it("indents a line that starts with an operator or a method call", keeps(`
+my @sorted = @items
+  .grep(*.defined)
+  .sort;
+say $a
+  ~ $b
+  ~ $c;
+if $a
+  && $b {
+  say 1;
+}
+sub f {
+  return $x
+    || 3;
+}`))
+
+  it("indents the lines of a list", keeps(`
+my @list = 1,
+  2,
+  3;
+sub f {
+  say 'a',
+    'b';
+  say 2;
+}`))
+
+  it("does not indent after a statement that has ended", keeps(`
+for @a {
+  .say;
+  .put
+}
+.say;
+$i++
+say 3;
+say $x; # ends in +
+-1;
+!!! 'todo';
+...
+say 4;
+sub g { }
+.say;`))
+
+  it("does not indent the pairs of a hash in braces", keeps(`
+my %h = {
+  a => 1,
+  b => 2,
+};
+f({
+  :a,
+  :b,
+});`))
+
+  it("only follows the brackets in parentheses and square brackets", keeps(`
+foo(1 +
+    2,
+    3);
+my @a = [
+  1 +
+  2,
+  3,
+];`))
+
+  it("indents a block that opens on a continued line like its statement", keeps(`
+if $a
+  && $b {
+  say 1;
+}
+my $f = $c ??
+  sub {
+    1
+  } !! 2;
+my @b = @a
+  .map({
+    $_ + 1
+  });
+say 1;
+for @a
+  -> $x {
+  say 2;
+}
+sub g { }
+if $a
+  && foo(
+    1
+  ) {
+  say 3;
+}
+class A {
+  method m {
+    say 4
+  }
+}
+while $a
+  || $b {
+  say 5;
+}`))
+
+  it("indents after a subscript in braces, and after a comment", keeps(`
+my $v = %h{$key}
+  // 'default';
+my %h = { # comment
+  a => 1,
+  b => 2,
+};
+my $n = $a
+  eq $b;
+sub f {
+  say 2
+    unless $z;
+  say 3 + # comment
+    4;
+}`))
+
   // The text of these belongs to the program, so a line in them keeps
   // the indentation it has.
   it("leaves the lines of a heredoc alone", () => {
