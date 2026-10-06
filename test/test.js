@@ -3,6 +3,7 @@ import {fileTests} from "@lezer/generator/dist/test"
 import {LanguageSupport, getIndentation, foldable, matchBrackets} from "@codemirror/language"
 import {EditorState} from "@codemirror/state"
 import {CompletionContext} from "@codemirror/autocomplete"
+import {toggleBlockComment} from "@codemirror/commands"
 import {classHighlighter, highlightTree} from "@lezer/highlight"
 import {TreeFragment} from "@lezer/common"
 
@@ -443,6 +444,70 @@ describe("folding", () => {
   })
 })
 
+describe("block comments", () => {
+  // The document after toggling a block comment on the part of `code`
+  // between the two `|` marks.
+  function toggle(code) {
+    let from = code.indexOf("|"), to = code.lastIndexOf("|") - 1
+    let state = EditorState.create({doc: code.replace(/\|/g, ""), selection: {anchor: from, head: to}, extensions: raku()})
+    let result = null
+    toggleBlockComment({state, dispatch: tr => result = tr.state.doc.toString()})
+    return result
+  }
+
+  it("wraps a selection in an embedded comment", () => {
+    assert.strictEqual(toggle("say 1; |say (2 + 3);| say 4;"), "say 1; #`( say (2 + 3); ) say 4;")
+  })
+
+  it("picks a bracket that the selection does not unbalance", () => {
+    assert.strictEqual(toggle("f(|1) + g(2|)"), "f(#`[ 1) + g(2 ])")
+    assert.strictEqual(toggle('|say "(";|'), '#`[ say "("; ]')
+    assert.strictEqual(toggle("|) ] [ (|"), "#`{ ) ] [ ( }")
+    assert.strictEqual(toggle("|) ] } > » 」|"), "#`(( ) ] } > » 」 ))")
+    assert.strictEqual(toggle("|)) ]|"), "#`{ )) ] }")
+  })
+
+  it("makes a comment that covers exactly the selection", () => {
+    for (let code of ["a |b) c| d", "a |( b| c", "a |) ] } (( b| c", "a |b| c"]) {
+      let result = toggle(code), from = code.indexOf("|")
+      let comment = rakuLanguage.parser.parse(result).resolveInner(from, 1)
+      assert.strictEqual(comment.name, "BlockComment", code)
+      assert.strictEqual(result.slice(comment.to), code.slice(code.lastIndexOf("|") + 1), code)
+    }
+  })
+
+  it("removes a comment, whichever bracket it uses", () => {
+    assert.strictEqual(toggle("say 1; |#`[ a) b ]| say 2;"), "say 1; a) b say 2;")
+    assert.strictEqual(toggle("say 1; #`[ |a) b| ] say 2;"), "say 1; a) b say 2;")
+    assert.strictEqual(toggle("|#`(( a ) b ))|"), "a ) b")
+    assert.strictEqual(toggle("|#`『 a 』|"), "a")
+    assert.strictEqual(toggle("|  #`[ a) ]\n|say 1"), "  a)\nsay 1")
+    assert.strictEqual(toggle("x; |#`[ a) ] |y"), "x; a) y")
+  })
+
+  it("picks a fitting bracket for a part of a comment's text", () => {
+    assert.strictEqual(toggle("#`[ a |[ b| ] c ]"), "#`[ a #`( [ b ) ] c ]")
+  })
+
+  it("picks a bracket that also fits the rest of the line", () => {
+    assert.strictEqual(toggle("|a| )"), "#`[ a ] )")
+    let state = EditorState.create({doc: "  a) b", selection: {anchor: 3, head: 6}, extensions: raku()})
+    assert.deepStrictEqual(state.languageDataAt("commentTokens", 2, 1)[0].block, {open: "#`[", close: "]"})
+  })
+
+  it("gives the line comment token along with the block tokens", () => {
+    let state = EditorState.create({doc: "a) b", selection: {anchor: 0, head: 4}, extensions: raku()})
+    let tokens = state.languageDataAt("commentTokens", 0, 1)[0]
+    assert.strictEqual(tokens.line, "#")
+    assert.deepStrictEqual(tokens.block, {open: "#`[", close: "]"})
+  })
+
+  it("leaves the tokens alone where the language is used without its support", () => {
+    let state = EditorState.create({doc: "a) b", selection: {anchor: 0, head: 4}, extensions: rakuLanguage})
+    assert.deepStrictEqual(state.languageDataAt("commentTokens", 0), [{line: "#", block: {open: "#`(", close: ")"}}])
+  })
+})
+
 describe("bracket matching", () => {
   // The text from the bracket at `at` through the one it matches.
   function match(code, at) {
@@ -591,8 +656,10 @@ describe("language support", () => {
   })
 
   it("declares its comment syntax", () => {
-    assert.deepStrictEqual(stateFor("").languageDataAt("commentTokens", 0),
-                           [{line: "#", block: {open: "#`(", close: ")"}}])
+    // The first one is used. The second is the fixed one of the language.
+    let [tokens, fixed] = stateFor("").languageDataAt("commentTokens", 0)
+    assert.deepStrictEqual({line: tokens.line, block: tokens.block}, fixed)
+    assert.deepStrictEqual(fixed, {line: "#", block: {open: "#`(", close: ")"}})
   })
 
   it("includes the completion source", () => {

@@ -6,6 +6,7 @@ import {Extension} from "@codemirror/state"
 import {rakuCompletionSource} from "./complete"
 import {keywordTags} from "./keywords"
 import {statementIndent, topIndent} from "./indent"
+import {embeddedCommentTokens} from "./comment"
 
 /// The Lezer parser for Raku, without the editor-specific node props.
 export const parser: LRParser = grammarParser
@@ -79,7 +80,8 @@ export const rakuLanguage = LRLanguage.define({
 /// routines, methods and special variables.
 export const rakuCompletion: Extension = rakuLanguage.data.of({autocomplete: rakuCompletionSource})
 
-/// Raku language support, with completion.
+/// Raku language support, with completion, and with block comment
+/// tokens that fit the selection.
 export function raku() {
-  return new LanguageSupport(rakuLanguage, [rakuCompletion])
+  return new LanguageSupport(rakuLanguage, [rakuCompletion, embeddedCommentTokens(rakuLanguage)])
 }

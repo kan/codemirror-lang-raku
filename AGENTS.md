@@ -61,6 +61,7 @@ node -e 'import("./dist/index.js").then(m => console.log(m.rakuLanguage.parser.p
 | `src/index.ts` | `rakuLanguage`、`rakuCompletion`、`raku()`。`styleTags`、インデント、折りたたみ、`languageData` |
 | `src/complete.ts` | 補完ソース。キーワード、組み込みの型、ルーチン、メソッド、特殊変数の固定の一覧を出す |
 | `src/indent.ts` | 文の継続行のインデント。文のノードが無いので、行の直前のトークンと行頭の文字列から継続かどうかを決める |
+| `src/comment.ts` | ブロックコメントの区切りを、選択範囲の中身に合わせて返す `languageData`。`raku()` に含まれる |
 | `src/keywords.ts` | キーワードの綴りとハイライト用タグの表。`index.ts` と `complete.ts` が読む |
 | `src/syntax.grammar.d.ts` | 生成されるパーサの型宣言（手書き） |
 | `src/syntax.grammar.terms.d.ts` | `tokens.ts` が使う項 ID の型宣言（手書き） |

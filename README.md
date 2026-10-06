@@ -60,7 +60,9 @@ const rakuDescription = LanguageDescription.of({
 
 <dl>
 <dt><code><strong>raku</strong>() → LanguageSupport</code></dt>
-<dd><p>Raku language support, with completion.</p></dd>
+<dd><p>Raku language support, with completion, and with block comment
+tokens that fit the selection (<code>#`[ … ]</code> around text that holds an
+unbalanced parenthesis).</p></dd>
 <dt><code><strong>rakuLanguage</strong>: LRLanguage</code></dt>
 <dd><p>A language provider based on the Lezer Raku parser, extended with
 highlighting and indentation information.</p></dd>
@@ -108,6 +110,9 @@ Not supported yet:
   a Pod block: no interpolation, no Pod formatting codes.
 - A quote adverb that is switched off through its argument, as in
   `qq:c(False)[…]`, counts as switched on.
+- The brackets of a block comment are picked for the `toggleBlockComment`
+  command. Text that unbalances every bracket that is tried gets
+  `` #`( `` … `)`, which then does not cover exactly that text.
 - `multi`, `proto` and `only` declarations without `sub` or `method` are
   not declaration nodes.
 - A user-defined operator is recognized where it is declared
@@ -118,9 +123,6 @@ Not supported yet:
   offers the same methods whatever the type of the invocant. In a
   string, only the code in `{ }` and in a subscript is completed, not
   the method name of `"$x.name()"`.
-- Toggling a block comment wraps the selection in `` #`( `` … `)`. When
-  the parentheses in the selection are not balanced, the comment ends
-  early or runs on past the selection.
 
 Heuristics that can be wrong:
 

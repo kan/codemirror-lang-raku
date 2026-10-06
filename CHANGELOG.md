@@ -2,6 +2,9 @@
 
 ### New features
 
+- Toggling a block comment picks brackets that fit the selection:
+  `` #`[ … ] `` when the selection holds an unbalanced parenthesis, and so
+  on. A comment is removed whichever bracket it was written with.
 - A line that continues a statement is indented one unit further: after
   a line that ends in an operator or a comma, and when it starts with a
   method call or an infix operator.

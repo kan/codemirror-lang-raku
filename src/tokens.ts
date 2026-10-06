@@ -67,7 +67,7 @@ const enum Ch {
 // Opening bracket -> closing bracket, for the delimiters of quotes and
 // embedded comments. Raku accepts any Unicode bracket pair; this lists
 // the ones that are likely to be typed.
-const brackets: {[open: number]: number} = {}
+export const brackets: {[open: number]: number} = {}
 for (let pair of ["()", "[]", "{}", "<>", "«»", "「」", "『』", "（）", "［］", "｛｝", "【】", "〈〉", "《》", "〔〕"])
   brackets[pair.charCodeAt(0)] = pair.charCodeAt(1)
 
