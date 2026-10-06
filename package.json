@@ -37,11 +37,13 @@
   ],
   "dependencies": {
     "@codemirror/language": "^6.0.0",
+    "@codemirror/state": "^6.0.0",
     "@lezer/common": "^1.0.0",
     "@lezer/highlight": "^1.0.0",
     "@lezer/lr": "^1.0.0"
   },
   "devDependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
     "@lezer/generator": "^1.8.1",
     "@rollup/plugin-typescript": "^12.3.0",
     "@types/node": "^26.6.4",

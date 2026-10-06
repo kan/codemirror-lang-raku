@@ -2,6 +2,9 @@ import {parser as grammarParser} from "./syntax.grammar"
 import {LRParser} from "@lezer/lr"
 import {LRLanguage, LanguageSupport, indentNodeProp, foldNodeProp, foldInside, delimitedIndent} from "@codemirror/language"
 import {styleTags, tags as t} from "@lezer/highlight"
+import {Extension} from "@codemirror/state"
+import {rakuCompletionSource} from "./complete"
+import {keywordTags} from "./keywords"
 
 /// The Lezer parser for Raku, without the editor-specific node props.
 export const parser: LRParser = grammarParser
@@ -15,7 +18,9 @@ export const rakuLanguage = LRLanguage.define({
       indentNodeProp.add({
         "Block Interpolation": delimitedIndent({closing: "}"}),
         Parens: delimitedIndent({closing: ")"}),
-        Brackets: delimitedIndent({closing: "]"})
+        Brackets: delimitedIndent({closing: "]"}),
+        // The lines of these are text, which keeps its indentation.
+        "StringLiteral Heredoc Pod BlockComment": () => null
       }),
       foldNodeProp.add({
         "Block Parens Brackets": foldInside,
@@ -26,16 +31,7 @@ export const rakuLanguage = LRLanguage.define({
         Heredoc(tree) { return {from: tree.from, to: tree.to} }
       }),
       styleTags({
-        "my our has state temp let constant anon augment supersede unit multi proto only": t.definitionKeyword,
-        "class role grammar module package sub method submethod token rule regex enum subset": t.definitionKeyword,
-        "if elsif else unless with orwith without for while until loop repeat given when default": t.controlKeyword,
-        "do gather take try return next last redo proceed succeed react whenever supply emit start": t.controlKeyword,
-        "BEGIN CHECK INIT END ENTER LEAVE KEEP UNDO FIRST NEXT LAST PRE POST CATCH CONTROL QUIT CLOSE DOC": t.controlKeyword,
-        "use need import require no": t.moduleKeyword,
-        "is does of returns handles where will trusts hides": t.modifier,
-        "and or not xor so andthen orelse notandthen div mod gcd lcm": t.operatorKeyword,
-        "eq ne lt gt le ge cmp leg eqv but": t.operatorKeyword,
-        self: t.self,
+        ...keywordTags,
         "True False": t.bool,
         Nil: t.null,
         Identifier: t.function(t.variableName),
@@ -70,13 +66,18 @@ export const rakuLanguage = LRLanguage.define({
     ]
   }),
   languageData: {
-    commentTokens: {line: "#"},
+    // An embedded comment can use any bracket. Parentheses are the usual choice.
+    commentTokens: {line: "#", block: {open: "#`(", close: ")"}},
     closeBrackets: {brackets: ["(", "[", "{", "'", '"', "「"]},
     indentOnInput: /^\s*[\}\]\)]$/
   }
 })
 
-/// Raku language support.
+/// Completion of Raku keywords and of the commonly used built-in types,
+/// routines, methods and special variables.
+export const rakuCompletion: Extension = rakuLanguage.data.of({autocomplete: rakuCompletionSource})
+
+/// Raku language support, with completion.
 export function raku() {
-  return new LanguageSupport(rakuLanguage)
+  return new LanguageSupport(rakuLanguage, [rakuCompletion])
 }

@@ -2,8 +2,8 @@
 
 [Raku](https://raku.org/) (formerly Perl 6) language support for the
 [CodeMirror 6](https://codemirror.net/) code editor: syntax highlighting,
-indentation and code folding, built on a [Lezer](https://lezer.codemirror.net/)
-grammar.
+indentation, code folding, bracket matching and completion, built on a
+[Lezer](https://lezer.codemirror.net/) grammar.
 
 > **Status: early development.** The package is not on npm yet. See
 > [Known limitations](#known-limitations) for what is missing.
@@ -46,10 +46,14 @@ const rakuDescription = LanguageDescription.of({
 
 <dl>
 <dt><code><strong>raku</strong>() → LanguageSupport</code></dt>
-<dd><p>Raku language support.</p></dd>
+<dd><p>Raku language support, with completion.</p></dd>
 <dt><code><strong>rakuLanguage</strong>: LRLanguage</code></dt>
 <dd><p>A language provider based on the Lezer Raku parser, extended with
 highlighting and indentation information.</p></dd>
+<dt><code><strong>rakuCompletion</strong>: Extension</code></dt>
+<dd><p>Completion of Raku keywords and of the commonly used built-in types,
+routines, methods and special variables. <code>raku()</code> includes it. To
+leave it out, use <code>rakuLanguage</code> in place of <code>raku()</code>.</p></dd>
 <dt><code><strong>parser</strong>: LRParser</code></dt>
 <dd><p>The Lezer parser for Raku, without the editor-specific node props.
 Use <code>rakuLanguage.parser</code> for the configured one.</p></dd>
@@ -93,6 +97,16 @@ Not supported yet:
   not declaration nodes
 - User-defined operators are recognized where they are declared
   (`sub infix:<+++>`), not as `&infix:<+++>`
+- Indentation follows brackets only. A statement continued on the next
+  line is not indented further
+- Completion offers a fixed list of names. It does not offer the
+  variables, routines and classes of the document, and after a `.` it
+  offers the same methods whatever the type of the invocant. In a
+  string, only the code in `{ }` and in a subscript is completed, not
+  the method name of `"$x.name()"`
+- Toggling a block comment wraps the selection in `` #`( `` … `)`. When
+  the parentheses in the selection are not balanced, the comment ends
+  early or runs on past the selection
 
 Heuristics that can be wrong:
 

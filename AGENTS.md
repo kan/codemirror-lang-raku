@@ -55,12 +55,14 @@ node -e 'import("./dist/index.js").then(m => console.log(m.rakuLanguage.parser.p
 |---|---|
 | `src/syntax.grammar` | Lezer 文法。トークン定義とノードの構造 |
 | `src/tokens.ts` | 外部トークナイザと `ContextTracker`。正規表現で書けないトークンを切り出す |
-| `src/index.ts` | `rakuLanguage` と `raku()`。`styleTags`、インデント、折りたたみ、`languageData` |
+| `src/index.ts` | `rakuLanguage`、`rakuCompletion`、`raku()`。`styleTags`、インデント、折りたたみ、`languageData` |
+| `src/complete.ts` | 補完ソース。キーワード、組み込みの型、ルーチン、メソッド、特殊変数の固定の一覧を出す |
+| `src/keywords.ts` | キーワードの綴りとハイライト用タグの表。`index.ts` と `complete.ts` が読む |
 | `src/syntax.grammar.d.ts` | 生成されるパーサの型宣言（手書き） |
 | `src/syntax.grammar.terms.d.ts` | `tokens.ts` が使う項 ID の型宣言（手書き） |
 | `test/*.txt` | 文法テスト。`@lezer/generator` の `fileTests` 形式 |
 | `test/fixtures/*.raku` | エラーノード無しでパースできるべき実コード |
-| `test/test.js` | 上の 2 つに加え、ハイライト、識別子の文字範囲の一致、増分パース、export の検査 |
+| `test/test.js` | 上の 2 つに加え、ハイライト、識別子の文字範囲の一致、増分パース、インデント、折りたたみ、括弧の対応、補完、export の検査 |
 
 **`tokens.ts` で新しい項を import したら、`src/syntax.grammar.terms.d.ts` にも宣言を足す。**
 足さないと型検査で落ちる。
@@ -186,6 +188,11 @@ README の「Syntax tree」節は利用者向けの同じ内容なので、こ�
   使う実コードを足していく。外部から持ってくるときは、ライセンスを確認し、出典をファイル先頭の
   コメントに書く
 - ハイライトの対応を変えたら、`test/test.js` の `highlighting` に検査を足す
+- **文法にキーワードを足したら、`src/keywords.ts` の `keywordTags` にも足す。** ハイライトと補完は
+  どちらもこの表を読む。足し忘れは `test/test.js` の `styles every keyword` と
+  `offers every keyword of the grammar` が検出する
+- インデント、折りたたみ、括弧の対応、補完の検査は `test/test.js` に書く。`EditorState` を作って
+  `getIndentation` などを呼ぶので、`test/*.txt` には書けない
 - **1 つのケースに項を並べるときは、`,` か `;` で区切る。** `'a' q{b}` のように項を空白だけで
   並べると、2 つ目は演算子の位置（`AfterTerm`）になり、実際のコードと違う読まれ方をする
 
@@ -200,7 +207,7 @@ DESIGN.md「作業フェーズ」に対する現在地。フェーズを終え�
 | 1. 雛形 | 済み |
 | 2. 基本ハイライト | 済み。コメント（行、`#|` と `#=`、`` #`( ) ``）、`'…'` と `"…"`（`$var` と `{ }` の補間）、数値、キーワード、変数、ブロック、宣言 |
 | 3. 難所対応 | 済み。クォート構文全般、heredoc、補間（添字、呼び出し、メソッド呼び出し）、正規表現、Pod、単語演算子とメタ演算子。正規表現と heredoc の中身は 1 トークンで、中は色分けしない |
-| 4. エディタ機能 | 括弧のインデントと折りたたみだけ済み。補完は未着手 |
+| 4. エディタ機能 | 済み。括弧のインデント、折りたたみ（ブロック、括弧、Pod、heredoc、埋め込みコメント）、括弧の対応、固定の一覧による補完。文の継続行のインデントと、文書内の名前の補完は無い |
 | 5. 公開準備 | README の下書きだけ済み。`demo/` と CHANGELOG は未着手 |
 
 未対応の構文と、誤判定しうる箇所の一覧は README の「Known limitations」にある。対応したら

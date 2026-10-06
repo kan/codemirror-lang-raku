@@ -79,10 +79,10 @@ Raku は「エディタ向け増分パーサ」にとって非常に難しい言
   - 例: `my`/`our`/`has` → `t.definitionKeyword`、`if`/`for`/`given` → `t.controlKeyword`、`sub`/`method`/`class`/`grammar`/`role` → `t.definitionKeyword`、`$x` → `t.variableName`、`$!attr` → `t.propertyName`、`Int`/`Str` 等の型 → `t.typeName`、POD → `t.docComment`、正規表現 → `t.regexp`、補間部分 → `t.special(t.string)` など。
 - `indentNodeProp` / `foldNodeProp`: ブロック `{}`、`()`, `[]`、POD ブロック、heredoc を折りたたみ対象にする。
 - `languageData`:
-  - `commentTokens: { line: "#" }`（ブロックコメントは任意括弧のため `block` は `` { open: "#`(", close: ")" } `` を採用するか要検討）
+  - `commentTokens: { line: "#" }`と `` block: { open: "#`(", close: ")" } ``（ブロックコメントは任意括弧だが、最も使われる丸括弧を採用した。選択範囲の丸括弧が釣り合わないとコメントの範囲がずれる）
   - `closeBrackets: { brackets: ["(", "[", "{", "'", '"', "「"] }`
   - `indentOnInput` 用の正規表現（`}` 入力時の再インデント）。
-- 補完（任意・フェーズ3）: キーワード、主要な組み込み型・関数を `completeFromList` で。
+- 補完（フェーズ 4 で実装）: キーワード、主要な組み込み型・関数・メソッド・特殊変数の固定の一覧。`completeFromList` は語を `\w` で切るため、`IO::Path`、`starts-with`、`$*OUT`、`.` の直後を扱えるよう独自の `CompletionSource`（`src/complete.ts`）にした。
 
 ---
 

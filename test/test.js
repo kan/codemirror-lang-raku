@@ -1,6 +1,8 @@
-import {raku, rakuLanguage} from "../dist/index.js"
+import {raku, rakuLanguage, rakuCompletion} from "../dist/index.js"
 import {fileTests} from "@lezer/generator/dist/test"
-import {LanguageSupport} from "@codemirror/language"
+import {LanguageSupport, getIndentation, foldable, matchBrackets} from "@codemirror/language"
+import {EditorState} from "@codemirror/state"
+import {CompletionContext} from "@codemirror/autocomplete"
 import {classHighlighter, highlightTree} from "@lezer/highlight"
 import {TreeFragment} from "@lezer/common"
 
@@ -27,6 +29,16 @@ function highlight(code) {
     result.push([code.slice(from, to), classes])
   })
   return result
+}
+
+// The keywords of the grammar. A keyword's node is named after the
+// keyword, so its name parses to a node of that name.
+function keywordNames() {
+  let parser = rakuLanguage.parser
+  return parser.nodeSet.types.map(type => type.name).filter(name => {
+    // The word `TypeName` is a type name, which also gives a node of that name.
+    return /^\w+$/.test(name) && name != "TypeName" && parser.parse(name).topNode.firstChild?.name == name
+  })
 }
 
 describe("highlighting", () => {
@@ -87,14 +99,7 @@ describe("highlighting", () => {
   // A keyword added to the grammar but not to styleTags would silently
   // stay unstyled.
   it("styles every keyword", () => {
-    let unstyled = []
-    for (let type of rakuLanguage.parser.nodeSet.types) {
-      if (!/^\w+$/.test(type.name)) continue
-      let tree = rakuLanguage.parser.parse(type.name)
-      if (tree.topNode.firstChild?.name != type.name) continue
-      if (!highlight(type.name).length) unstyled.push(type.name)
-    }
-    assert.deepStrictEqual(unstyled, [])
+    assert.deepStrictEqual(keywordNames().filter(name => !highlight(name).length), [])
   })
 })
 
@@ -197,11 +202,260 @@ describe("incremental parsing of heredocs", () => {
   }
 })
 
+function stateFor(doc) {
+  return EditorState.create({doc, extensions: raku()})
+}
+
+// The indentation computed for each line of `code`. The default indent
+// unit is two spaces.
+function indentation(code) {
+  let state = stateFor(code), result = []
+  for (let i = 1; i <= state.doc.lines; i++) result.push(getIndentation(state, state.doc.line(i).from))
+  return result
+}
+
+describe("indentation", () => {
+  // Checks that every line of `code` is indented the way it is written.
+  function keeps(code) {
+    return () => assert.deepStrictEqual(indentation(code), code.split("\n").map(line => /^ */.exec(line)[0].length))
+  }
+
+  it("indents blocks", keeps(`
+class Foo {
+  has $.x;
+  method m {
+    if $!x {
+      say 1;
+    }
+    else {
+      say 2;
+    }
+  }
+}`))
+
+  it("indents parentheses and brackets", keeps(`
+my @a = [
+  1,
+  2,
+];
+foo(
+  $a,
+  $b
+);
+bar($a,
+    $b);`))
+
+  it("indents the body of a regex declaration", keeps(`
+grammar G {
+  token t {
+    \\d+
+    <word>
+  }
+}`))
+
+  it("indents an interpolated block", keeps(`
+say "a {
+  $x
+} b";`))
+
+  it("indents in a block that is not closed", keeps(`
+sub f {
+  if $x {
+    `))
+
+  // The text of these belongs to the program, so a line in them keeps
+  // the indentation it has.
+  it("leaves the lines of a heredoc alone", () => {
+    assert.deepStrictEqual(indentation("sub f {\n  my $x = q:to/END/;\n      text\n      END\n  say $x;\n}"),
+                           [0, 2, null, null, 2, 0])
+  })
+
+  it("leaves the lines of a Pod block alone", () => {
+    assert.deepStrictEqual(indentation("sub f {\n  =begin pod\ntext\n  =end pod\n  say 1;\n}"),
+                           [0, 2, null, null, 2, 0])
+  })
+
+  it("leaves the lines of a string and of an embedded comment alone", () => {
+    assert.deepStrictEqual(indentation("sub f {\n  say 'a\nb';\n  #`(\nc\n  )\n  say 1;\n}"),
+                           [0, 2, null, 2, null, null, 2, 0])
+  })
+})
+
+describe("folding", () => {
+  // The text that folding the given line hides, or null.
+  function fold(code, lineNumber) {
+    let state = stateFor(code), line = state.doc.line(lineNumber)
+    let range = foldable(state, line.from, line.to)
+    return range && state.sliceDoc(range.from, range.to)
+  }
+
+  it("folds blocks, parentheses and brackets", () => {
+    assert.strictEqual(fold("sub f {\n  1\n}", 1), "\n  1\n")
+    assert.strictEqual(fold("f(\n  1\n)", 1), "\n  1\n")
+    assert.strictEqual(fold("my @a = [\n  1\n];", 1), "\n  1\n")
+    assert.strictEqual(fold("sub f { 1 }\nsay 2", 1), null)
+  })
+
+  it("folds the body of a regex declaration", () => {
+    assert.strictEqual(fold("token t {\n  \\d+\n}", 1), "\n  \\d+\n")
+  })
+
+  it("folds a Pod block after its first line", () => {
+    assert.strictEqual(fold("=begin pod\ntext\n=end pod\nsay 1", 1), "\ntext\n=end pod")
+  })
+
+  it("folds a heredoc from the line of its opener", () => {
+    assert.strictEqual(fold("say q:to/END/;\n  text\n  END\nsay 1", 1), "\n  text\n  END")
+  })
+
+  it("folds an embedded comment", () => {
+    assert.strictEqual(fold("#`(\n  text\n)\nsay 1", 1), "(\n  text\n)")
+  })
+})
+
+describe("bracket matching", () => {
+  // The text from the bracket at `at` through the one it matches.
+  function match(code, at) {
+    let state = stateFor(code), found = matchBrackets(state, at, 1)
+    return found && found.matched ? state.sliceDoc(found.start.from, found.end.to) : null
+  }
+
+  it("matches the three kinds of brackets", () => {
+    assert.strictEqual(match("f(1, [2, 3], { 4 })", 1), "(1, [2, 3], { 4 })")
+    assert.strictEqual(match("f(1, [2, 3], { 4 })", 5), "[2, 3]")
+    assert.strictEqual(match("f(1, [2, 3], { 4 })", 13), "{ 4 }")
+  })
+
+  it("skips brackets in strings, comments and regexes", () => {
+    assert.strictEqual(match("{ ')' # }\n '}' }", 0), "{ ')' # }\n '}' }")
+    assert.strictEqual(match("( /\\)/ )", 0), "( /\\)/ )")
+  })
+
+  it("matches the braces of a regex declaration and of an interpolation", () => {
+    assert.strictEqual(match("token t { a ** {2} }", 8), "{ a ** {2} }")
+    assert.strictEqual(match('"a { 1 } b"', 3), "{ 1 }")
+  })
+})
+
+describe("completion", () => {
+  // The labels offered at the `|` in `code`, or null when there is no
+  // completion there.
+  function complete(code, explicit = false) {
+    let pos = code.indexOf("|"), state = stateFor(code.slice(0, pos) + code.slice(pos + 1))
+    let [source] = state.languageDataAt("autocomplete", pos)
+    let result = source(new CompletionContext(state, pos, explicit))
+    if (!result) return null
+    let typed = state.sliceDoc(result.from, pos)
+    return result.options.map(option => option.label).filter(label => label.startsWith(typed))
+  }
+
+  it("completes keywords, types and routines", () => {
+    assert.deepStrictEqual(complete("subm|"), ["submethod"])
+    assert.deepStrictEqual(complete("my Rati|"), ["Rational"])
+    assert.deepStrictEqual(complete("sprin|"), ["sprintf"])
+    assert.deepStrictEqual(complete("my IO::Pa|"), ["IO::Path"])
+    assert.deepStrictEqual(complete("{ els|"), ["elsif", "else"])
+  })
+
+  it("completes methods after a dot", () => {
+    assert.deepStrictEqual(complete("$x.ele|"), ["elems"])
+    assert.ok(complete("$x.|").includes("elems"))
+    assert.ok(!complete("$x.e|").includes("elsif"))
+    assert.strictEqual(complete("1..|"), null)
+  })
+
+  it("completes methods after a mutating dot", () => {
+    assert.deepStrictEqual(complete("$x.=contai|"), ["contains"])
+    assert.deepStrictEqual(complete("$x .= contai|"), ["contains"])
+    assert.ok(complete("$x.=|").includes("elems"))
+  })
+
+  it("only completes after the dot of a number when asked to", () => {
+    for (let code of ["1.|", "say 1.|", "use v6.|"]) {
+      assert.strictEqual(complete(code), null, code)
+      assert.ok(complete(code, true).includes("elems"), code)
+    }
+    assert.ok(complete("$n1.|").includes("elems"))
+  })
+
+  it("stops when the typed text is no longer a name", () => {
+    let state = stateFor("f()"), {validFor} = state.languageDataAt("autocomplete", 2)[0](new CompletionContext(state, 2, true))
+    for (let [text, valid] of [["", true], ["sa", true], ["IO::Pa", true], ["starts-w", true], [":sa", false], ["sa ", false]])
+      assert.strictEqual(validFor.test(text), valid, text)
+  })
+
+  it("completes dynamic and compile-time variables", () => {
+    assert.deepStrictEqual(complete("say %*E|"), ["%*ENV"])
+    assert.deepStrictEqual(complete("say $?FI|"), ["$?FILE"])
+    assert.ok(complete("say $*|").includes("$*OUT"))
+  })
+
+  it("does not complete where a name is being made up", () => {
+    assert.strictEqual(complete("my $sa|"), null)
+    assert.strictEqual(complete("sub sa|"), null)
+    assert.strictEqual(complete("class Int|"), null)
+    assert.strictEqual(complete("f(:sa|"), null)
+    assert.strictEqual(complete("self!sa|"), null)
+    assert.strictEqual(complete("$x!sa|"), null)
+    assert.strictEqual(complete("f()!sa|"), null)
+    for (let code of ["say !defin|", "f(!defin|", "$x=!defin|", "$x !defin|"])
+      assert.deepStrictEqual(complete(code), ["defined"], code)
+    assert.strictEqual(complete("my $sa|", true), null)
+    assert.strictEqual(complete("sub sa|", true), null)
+  })
+
+  it("does not complete in strings, comments, regexes, heredocs and Pod", () => {
+    assert.strictEqual(complete("'sa|'"), null)
+    assert.strictEqual(complete('"sa|"'), null)
+    assert.strictEqual(complete("# sa|"), null)
+    assert.strictEqual(complete("#`( sa| )"), null)
+    assert.strictEqual(complete("/ sa| /"), null)
+    assert.strictEqual(complete("say q:to/END/;\n  sa|\n  END\n"), null)
+    assert.strictEqual(complete("=begin pod\nsa|\n=end pod\n"), null)
+    assert.strictEqual(complete("'a |'", true), null)
+    assert.strictEqual(complete("token t {|}", true), null)
+    assert.strictEqual(complete("token t { |a }", true), null)
+  })
+
+  it("completes in the code of an interpolation", () => {
+    assert.deepStrictEqual(complete('"a { sprin|'), ["sprintf"])
+    assert.deepStrictEqual(complete('"a { sprin| } b"'), ["sprintf"])
+  })
+
+  it("only lists everything when asked to", () => {
+    assert.strictEqual(complete("say 1; |"), null)
+    assert.ok(complete("say 1; |", true).includes("say"))
+    assert.ok(complete("|", true).includes("class"))
+  })
+
+  it("offers every keyword of the grammar", () => {
+    let labels = new Set(complete("|", true))
+    assert.deepStrictEqual(keywordNames().filter(name => !labels.has(name)), [])
+  })
+
+  it("offers each name once", () => {
+    for (let code of ["|", "$x.|", "$*|"]) {
+      let labels = complete(code, true)
+      assert.deepStrictEqual(labels.filter((label, i) => labels.indexOf(label) != i), [])
+    }
+  })
+})
+
 describe("language support", () => {
   it("exports a LanguageSupport factory", () => {
     let support = raku()
     assert.ok(support instanceof LanguageSupport)
     assert.strictEqual(support.language, rakuLanguage)
     assert.strictEqual(rakuLanguage.name, "raku")
+  })
+
+  it("declares its comment syntax", () => {
+    assert.deepStrictEqual(stateFor("").languageDataAt("commentTokens", 0),
+                           [{line: "#", block: {open: "#`(", close: ")"}}])
+  })
+
+  it("includes the completion source", () => {
+    assert.ok(raku().support.includes(rakuCompletion))
+    assert.strictEqual(EditorState.create({extensions: rakuLanguage}).languageDataAt("autocomplete", 0).length, 0)
   })
 })
