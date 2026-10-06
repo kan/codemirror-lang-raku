@@ -1,0 +1,140 @@
+# Integers
+
+42 1_000_000 0x1F 0o17 0b1010 0d99
+
+==>
+
+Program(Number, Number, Number, Number, Number, Number)
+
+# Decimals, exponents and imaginary numbers
+
+1.5 1e10 2.5e-3 3i 1.5e3i
+
+==>
+
+Program(Number, Number, Number, Number, Number)
+
+# A range is not a decimal
+
+1..5 1..^5
+
+==>
+
+Program(Number, Operator, Number, Number, Operator, Number)
+
+# A method call on a number
+
+1.say
+
+==>
+
+Program(Number, MethodCall(MethodName))
+
+# Versions
+
+use v6.d; v1.2.3 v6.e.PREVIEW v1.2+
+
+==>
+
+Program(use, Version, Version, Version, Version)
+
+# Single-quoted strings
+
+'hello' 'it\'s' '$not @interpolated {here}' ''
+
+==>
+
+Program(StringLiteral, StringLiteral, StringLiteral, StringLiteral)
+
+# Double-quoted strings
+
+"hello" "" "a # not a comment"
+
+==>
+
+Program(StringLiteral, StringLiteral, StringLiteral)
+
+# Escapes
+
+"tab\there \"quoted\" \\"
+
+==>
+
+Program(StringLiteral(Escape, Escape, Escape, Escape))
+
+# Variable interpolation
+
+"Hello, $name! $!attr $.attr $*OUT $0 $/"
+
+==>
+
+Program(StringLiteral(VariableName, AttributeName, AttributeName,
+  SpecialVariable, VariableName, VariableName))
+
+# A lone sigil is not an interpolation
+
+"costs 5$ or 50% at me@example.com"
+
+==>
+
+Program(StringLiteral)
+
+# Block interpolation
+
+"sum: {$a + $b} and {"nested {1}"}"
+
+==>
+
+Program(StringLiteral(
+  Interpolation(VariableName, Operator, VariableName),
+  Interpolation(StringLiteral(Interpolation(Number)))))
+
+# Multi-line string
+
+"line one
+line two"
+
+==>
+
+Program(StringLiteral)
+
+# Booleans and Nil
+
+True False Nil
+
+==>
+
+Program(True, False, Nil)
+
+# Pairs
+
+:name :!flag key => 1
+
+==>
+
+Program(PairKey, PairKey, Identifier, Operator, Number)
+
+# Type names and smileys
+
+Int Str:D Any:U Foo::Bar:_ Foo.new
+
+==>
+
+Program(TypeName, TypeName, TypeName, TypeName, TypeName, MethodCall(MethodName))
+
+# A capitalized pair is not a smiley
+
+export(:DEFAULT) Foo:Default Foo :D foo:D
+
+==>
+
+Program(Identifier, Parens(PairKey), TypeName, PairKey, TypeName, PairKey,
+  Identifier, PairKey)
+
+# A name that starts like a version
+
+v8-engine v2foo v1.2
+
+==>
+
+Program(Identifier, Identifier, Version)

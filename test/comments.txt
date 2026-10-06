@@ -1,0 +1,80 @@
+# Line comments
+
+#!/usr/bin/env raku
+# a comment
+say 1; # trailing
+
+==>
+
+Program(LineComment, LineComment, Identifier, Number, LineComment)
+
+# Declarator comments
+
+#| leading doc
+sub foo { }
+#= trailing doc
+
+==>
+
+Program(DocComment, RoutineDeclaration(sub, RoutineName, Block), DocComment)
+
+# Embedded comment
+
+say #`( inline ) 1;
+
+==>
+
+Program(Identifier, BlockComment, Number)
+
+# Embedded comment spanning lines
+
+#`[
+  say 1;
+]
+say 2;
+
+==>
+
+Program(BlockComment, Identifier, Number)
+
+# Embedded comment with nested brackets
+
+#`( a (b) c ) 1
+
+==>
+
+Program(BlockComment, Number)
+
+# Embedded comment with repeated brackets
+
+#`{{ a } b }} 1
+
+==>
+
+Program(BlockComment, Number)
+
+# Embedded comment with Unicode brackets
+
+#`「 a 」 1 #`« b » 2
+
+==>
+
+Program(BlockComment, Number, BlockComment, Number)
+
+# Backtick without a bracket is a line comment
+
+#` not embedded
+1
+
+==>
+
+Program(LineComment, Number)
+
+# Unclosed embedded comment runs to the end
+
+#`( never closed
+say 1;
+
+==>
+
+Program(BlockComment)

@@ -1,0 +1,104 @@
+# Sigils
+
+$scalar @array %hash &code
+
+==>
+
+Program(VariableName, VariableName, VariableName, VariableName)
+
+# Attribute twigils
+
+$!private $.public @!items %.table
+
+==>
+
+Program(AttributeName, AttributeName, AttributeName, AttributeName)
+
+# Dynamic and compile-time twigils
+
+$*OUT @*ARGS %*ENV $?FILE &?ROUTINE $=pod $~MAIN
+
+==>
+
+Program(SpecialVariable, SpecialVariable, SpecialVariable, SpecialVariable,
+  SpecialVariable, SpecialVariable, SpecialVariable)
+
+# Placeholder twigils
+
+$^a $:named
+
+==>
+
+Program(VariableName, VariableName)
+
+# Special variables
+
+$_ $/ $! $0 $12 @_ %_
+
+==>
+
+Program(VariableName, VariableName, VariableName, VariableName, VariableName,
+  VariableName, VariableName)
+
+# Hyphens and apostrophes in names
+
+$is-prime $don't-panic
+
+==>
+
+Program(VariableName, VariableName)
+
+# A hyphen before a digit is a subtraction
+
+$a-1
+
+==>
+
+Program(VariableName, Operator, Number)
+
+# Qualified names
+
+$Foo::bar @*Foo::baz Foo::Bar::baz
+
+==>
+
+Program(VariableName, SpecialVariable, TypeName)
+
+# Non-ASCII names
+
+$naïve $λ $変数 café ｶﾅ µ ｆｏｏ
+
+==>
+
+Program(VariableName, VariableName, VariableName, Identifier, Identifier,
+  Identifier, Identifier)
+
+# Operators next to variables
+
+!$x; -$y; |@args; $a+$b
+
+==>
+
+Program(Operator, VariableName, Operator, VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName)
+
+# An operator before a hash or code sigil
+
+*%opts; |%opts; !%seen; |&code; $a %% 2; $a && $b; $a % $b; $a %= 2
+
+==>
+
+Program(Operator, VariableName, Operator, VariableName, Operator, VariableName,
+  Operator, VariableName,
+  VariableName, Operator, Number,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, Number)
+
+# Anonymous sigils
+
+my $ = 1; @($x)
+
+==>
+
+Program(my, Operator, Number, Parens(VariableName))

@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "es6",
+    "module": "es2020",
+    "newLine": "lf",
+    "moduleResolution": "bundler",
+    "rootDir": "src",
+    "declaration": true,
+    "declarationDir": "dist"
+  },
+  "include": ["src/*.ts"]
+}

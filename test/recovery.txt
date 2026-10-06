@@ -1,0 +1,85 @@
+# Unclosed block
+
+sub foo {
+  say 1;
+
+==>
+
+Program(RoutineDeclaration(sub, RoutineName, Block(Identifier, Number, ⚠)))
+
+# Stray closing brackets
+
+) ] } say 1
+
+==>
+
+Program(⚠, ⚠, ⚠, Identifier, Number)
+
+# Declarator at the end of the input
+
+class
+
+==>
+
+Program(PackageDeclaration(class, ⚠))
+
+# Unclosed single-quoted string with no later quote
+
+'oops
+say 1;
+
+==>
+
+Program(⚠, Identifier, Identifier, Number)
+
+# Unclosed single-quoted string runs to the next quote
+
+'oops
+say 'x';
+
+==>
+
+Program(StringLiteral, Identifier, ⚠)
+
+# Backslashed brackets and quotes do not nest
+
+token brace { \{ \" \' \[ } say 1;
+
+==>
+
+Program(RegexDeclaration(token, RegexName,
+  Block(Operator, Operator, Operator, Operator)), Identifier, Number)
+
+# Unclosed double-quoted string
+
+"oops $x
+
+==>
+
+Program(StringLiteral(VariableName, ⚠))
+
+# Code after an unclosed parenthesis is still tokenized
+
+foo(1,
+my $x = "s";
+
+==>
+
+Program(Identifier, Parens(Number, my, VariableName, Operator, StringLiteral, ⚠))
+
+# Unknown characters
+
+say ¤ 1;
+
+==>
+
+Program(Identifier, ⚠, Number)
+
+# Mismatched brackets
+
+foo([1, 2);
+say 3;
+
+==>
+
+Program(Identifier, Parens(Brackets(Number, Number, ⚠)), Identifier, Number)

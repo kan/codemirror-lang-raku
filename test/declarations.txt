@@ -1,0 +1,167 @@
+# Class
+
+class Point is Shape does Printable[Int] {
+    has $.x is rw;
+}
+
+==>
+
+Program(PackageDeclaration(class, PackageName, is, TypeName, does, TypeName,
+  Brackets(TypeName),
+  Block(has, AttributeName, is, Identifier)))
+
+# Package kinds
+
+role R { } grammar G { } module M { } package P { }
+
+==>
+
+Program(
+  PackageDeclaration(role, PackageName, Block),
+  PackageDeclaration(grammar, PackageName, Block),
+  PackageDeclaration(module, PackageName, Block),
+  PackageDeclaration(package, PackageName, Block))
+
+# Unit-scoped package
+
+unit class Foo::Bar;
+sub f { }
+
+==>
+
+Program(unit, PackageDeclaration(class, PackageName),
+  RoutineDeclaration(sub, RoutineName, Block))
+
+# Lowercase and qualified package names
+
+module foo::bar { }
+
+==>
+
+Program(PackageDeclaration(module, PackageName, Block))
+
+# Sub
+
+sub is-prime(Int $n --> Bool) is export { $n.is-prime }
+
+==>
+
+Program(RoutineDeclaration(sub, RoutineName,
+  Parens(TypeName, VariableName, Operator, TypeName),
+  is, Identifier,
+  Block(VariableName, MethodCall(MethodName))))
+
+# Anonymous sub
+
+my $f = sub ($x) { $x };
+
+==>
+
+Program(my, VariableName, Operator,
+  RoutineDeclaration(sub, Parens(VariableName), Block(VariableName)))
+
+# Multi
+
+multi sub foo(Int $x) { } proto method bar(|) { }
+
+==>
+
+Program(
+  multi, RoutineDeclaration(sub, RoutineName, Parens(TypeName, VariableName), Block),
+  proto, RoutineDeclaration(method, RoutineName, Parens(Operator), Block))
+
+# Methods
+
+class C {
+    method greet(Str $who) { "Hello, $who" }
+    method !private { }
+    method ^meta { }
+    submethod BUILD(:$!name) { }
+}
+
+==>
+
+Program(PackageDeclaration(class, PackageName, Block(
+  RoutineDeclaration(method, RoutineName, Parens(TypeName, VariableName),
+    Block(StringLiteral(VariableName))),
+  RoutineDeclaration(method, RoutineName, Block),
+  RoutineDeclaration(method, RoutineName, Block),
+  RoutineDeclaration(submethod, RoutineName, Parens(AttributeName), Block))))
+
+# A declared name is never a keyword
+
+method next { } sub default { } class if { }
+
+==>
+
+Program(
+  RoutineDeclaration(method, RoutineName, Block),
+  RoutineDeclaration(sub, RoutineName, Block),
+  PackageDeclaration(class, PackageName, Block))
+
+# Only methods take a mark before the name
+
+constant !x = 1; sub !y { }
+
+==>
+
+Program(ConstantDeclaration(constant), Operator, Identifier, Operator, Number,
+  RoutineDeclaration(sub, Operator, Identifier, Block))
+
+# A method name is never a keyword
+
+$x.default; .is; $obj.?if; $obj.^name; $t.Foo::bar
+
+==>
+
+Program(
+  VariableName, MethodCall(MethodName),
+  MethodCall(MethodName),
+  VariableName, MethodCall(MethodName),
+  VariableName, MethodCall(MethodName),
+  VariableName, MethodCall(MethodName))
+
+# Enum, subset and constant
+
+enum Color;
+subset Positive of Int where * > 0;
+constant PI = 3.14;
+my constant $x = 1;
+
+==>
+
+Program(
+  EnumDeclaration(enum, EnumName),
+  SubsetDeclaration(subset, SubsetName), of, TypeName, where, Operator, Operator, Number,
+  ConstantDeclaration(constant, ConstantName), Operator, Number,
+  my, ConstantDeclaration(constant), VariableName, Operator, Number)
+
+# Regex declarators
+
+grammar G {
+    token TOP { }
+    rule item { }
+    regex word { }
+}
+
+==>
+
+Program(PackageDeclaration(grammar, PackageName, Block(
+  RegexDeclaration(token, RegexName, Block),
+  RegexDeclaration(rule, RegexName, Block),
+  RegexDeclaration(regex, RegexName, Block))))
+
+# Nested declarations
+
+class A {
+    class B {
+        method m { sub inner { } }
+    }
+}
+
+==>
+
+Program(PackageDeclaration(class, PackageName, Block(
+  PackageDeclaration(class, PackageName, Block(
+    RoutineDeclaration(method, RoutineName, Block(
+      RoutineDeclaration(sub, RoutineName, Block))))))))

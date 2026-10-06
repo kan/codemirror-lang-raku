@@ -1,0 +1,215 @@
+// Raku is not context-free, so this grammar does not try to parse
+// statements and expressions. It tokenizes the input, nests brackets,
+// and recognizes the heads of declarations. That keeps the tree
+// usable on incomplete or unsupported code.
+
+@top Program { element* }
+
+@skip { whitespace | LineComment | DocComment | BlockComment }
+
+element { nonBlock | Block | ";" }
+
+// Everything that can appear between a declarator and its body.
+nonBlock {
+  Parens |
+  Brackets |
+  PackageDeclaration |
+  RoutineDeclaration |
+  RegexDeclaration |
+  EnumDeclaration |
+  SubsetDeclaration |
+  ConstantDeclaration |
+  MethodCall |
+  VariableName |
+  AttributeName |
+  SpecialVariable |
+  Identifier |
+  TypeName |
+  Number |
+  Version |
+  StringLiteral |
+  PairKey |
+  keyword |
+  Operator |
+  "," |
+  ":" |
+  "." |
+  sigil
+}
+
+Block { "{" element* "}" }
+Parens { "(" element* ")" }
+Brackets { "[" element* "]" }
+
+// A declaration runs up to its body block, or to the `;` of a
+// `unit class Foo;` style declaration.
+declarationTail { nonBlock* (Block | ";") }
+
+PackageDeclaration {
+  (kw<"class"> | kw<"role"> | kw<"grammar"> | kw<"module"> | kw<"package">)
+  PackageName? declarationTail
+}
+
+RoutineDeclaration {
+  (kw<"sub"> RoutineName? | (kw<"method"> | kw<"submethod">) methodRoutineName?)
+  declarationTail
+}
+
+RegexDeclaration {
+  (kw<"token"> | kw<"rule"> | kw<"regex">)
+  RegexName? declarationTail
+}
+
+EnumDeclaration { kw<"enum"> EnumName? }
+SubsetDeclaration { kw<"subset"> SubsetName? }
+ConstantDeclaration { kw<"constant"> ConstantName? }
+
+PackageName { declaredName }
+RoutineName { declaredName }
+// `method !private` and `method ^meta` keep their mark in the name.
+methodRoutineName[@name=RoutineName] { declaredMethodName }
+RegexName { declaredName }
+EnumName { declaredName }
+SubsetName { declaredName }
+ConstantName { declaredName }
+
+MethodCall { methodDot MethodName }
+
+Identifier { identifier }
+// A capitalized name is taken to be a type, and may carry a type
+// smiley: Int:D, Str:U, Any:_
+TypeName { capIdentifier smiley? }
+
+@skip {} {
+  StringLiteral {
+    singleQuoted |
+    quote (
+      stringContent | Escape | Interpolation |
+      // A `$` that does not start a variable is a lone sigil.
+      VariableName | AttributeName | SpecialVariable | sigil
+    )* quote
+  }
+}
+
+Interpolation { "{" element* "}" }
+
+keyword {
+  kw<"my"> | kw<"our"> | kw<"has"> | kw<"state"> | kw<"temp"> | kw<"let"> |
+  kw<"anon"> | kw<"augment"> | kw<"supersede"> | kw<"unit"> |
+  kw<"multi"> | kw<"proto"> | kw<"only"> |
+
+  kw<"if"> | kw<"elsif"> | kw<"else"> | kw<"unless"> |
+  kw<"with"> | kw<"orwith"> | kw<"without"> |
+  kw<"for"> | kw<"while"> | kw<"until"> | kw<"loop"> | kw<"repeat"> |
+  kw<"given"> | kw<"when"> | kw<"default"> |
+  kw<"do"> | kw<"gather"> | kw<"take"> | kw<"try"> |
+  kw<"return"> | kw<"next"> | kw<"last"> | kw<"redo"> |
+  kw<"proceed"> | kw<"succeed"> |
+  kw<"react"> | kw<"whenever"> | kw<"supply"> | kw<"emit"> | kw<"start"> |
+
+  kw<"use"> | kw<"need"> | kw<"import"> | kw<"require"> | kw<"no"> |
+
+  kw<"is"> | kw<"does"> | kw<"of"> | kw<"returns"> | kw<"handles"> |
+  kw<"where"> | kw<"will"> | kw<"trusts"> | kw<"hides"> |
+
+  kw<"and"> | kw<"or"> | kw<"not"> | kw<"xor"> | kw<"so"> |
+  kw<"andthen"> | kw<"orelse"> | kw<"notandthen"> |
+  // `x`, `xx`, `min` and `max` are left out: without knowing whether a
+  // word is in operator position, they are more often ordinary names.
+  kw<"div"> | kw<"mod"> | kw<"gcd"> | kw<"lcm"> |
+  kw<"eq"> | kw<"ne"> | kw<"lt"> | kw<"gt"> | kw<"le"> | kw<"ge"> |
+  kw<"cmp"> | kw<"leg"> | kw<"eqv"> | kw<"but"> |
+
+  kw<"self"> |
+
+  capKw<"True"> | capKw<"False"> | capKw<"Nil"> |
+
+  capKw<"BEGIN"> | capKw<"CHECK"> | capKw<"INIT"> | capKw<"END"> |
+  capKw<"ENTER"> | capKw<"LEAVE"> | capKw<"KEEP"> | capKw<"UNDO"> |
+  capKw<"FIRST"> | capKw<"NEXT"> | capKw<"LAST"> | capKw<"PRE"> | capKw<"POST"> |
+  capKw<"CATCH"> | capKw<"CONTROL"> | capKw<"QUIT"> | capKw<"CLOSE"> | capKw<"DOC">
+}
+
+kw<term> { @specialize[@name={term}]<identifier, term> }
+capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
+
+@external tokens blockComment from "./tokens" { BlockComment }
+@external tokens methodDotToken from "./tokens" { methodDot[@name="."] }
+// Names in positions where a word is never a keyword: `method next`, `.default`.
+@external tokens nameToken from "./tokens" { MethodName, declaredName, declaredMethodName }
+// These two need to see that no identifier character follows.
+@external tokens smileyToken from "./tokens" { smiley }
+@external tokens versionToken from "./tokens" { Version }
+@external tokens stringContentToken from "./tokens" { stringContent }
+
+@tokens {
+  whitespace { @whitespace+ }
+
+  LineComment { "#" ![\n]* }
+  DocComment { "#" $[|=] ![\n]* }
+  @precedence { DocComment, LineComment }
+
+  // Keep these ranges in sync with isIdentifierStart in tokens.ts. They
+  // leave out the punctuation and symbol blocks, where Raku's Unicode
+  // operators and brackets live. Combining marks are included, so that
+  // decomposed accented letters do not split a name.
+  capStart { $[A-Z] }
+  lowerStart { $[a-z_\u{aa}\u{b5}\u{ba}\u{c0}-\u{d6}\u{d8}-\u{f6}\u{f8}-\u{167f}\u{1681}-\u{1fff}\u{2c00}-\u{2fef}\u{3040}-\u{d7ff}\u{f900}-\u{fdff}\u{ff21}-\u{ff3a}\u{ff41}-\u{ff5a}\u{ff66}-\u{ffdc}\u{10000}-\u{10ffff}] }
+  identifierStart { capStart | lowerStart }
+  // A hyphen or apostrophe belongs to an identifier only when a letter
+  // follows, so `$a-1` stays a subtraction.
+  wordRest { (identifierStart | @digit | $[\-'] identifierStart)* }
+  word { identifierStart wordRest }
+  qualifiedRest { ("::" word)* }
+  qualifiedWord { word qualifiedRest }
+
+  identifier { lowerStart wordRest qualifiedRest }
+  capIdentifier { capStart wordRest qualifiedRest }
+
+  PairKey { ":" "!"? qualifiedWord }
+
+  // Where one token is a prefix of another, the longer one is listed
+  // first, so that it wins whenever it matches.
+  @precedence {
+    AttributeName, SpecialVariable, VariableName,
+    PairKey, Operator, sigil, ":", "."
+  }
+
+  sigilChar { $[$@%&] }
+  VariableName { sigilChar $[\^:]? qualifiedWord | "$" @digit+ | "$" $[/!] }
+  AttributeName { sigilChar $[!.] qualifiedWord }
+  SpecialVariable { sigilChar $[*?=~] qualifiedWord }
+  sigil { $[$@] }
+
+  digits { @digit+ ("_" @digit+)* }
+  Number {
+    digits ("." digits)? ($[eE] $[+\-]? @digit+)? "i"? |
+    "0" $[xX] $[0-9a-fA-F_]+ |
+    "0" $[oO] $[0-7_]+ |
+    "0" $[bB] $[01_]+ |
+    "0" $[dD] $[0-9_]+
+  }
+
+  singleQuoted { "'" (!['\\] | "\\" _)* "'" }
+  // Not a node of its own, so that it is styled as part of the string.
+  quote { '"' }
+  Escape { "\\" _ }
+
+  // ASCII operator characters, « » × ÷ …, and the mathematical operators block.
+  operatorChar { $[+\-*/~^|<>=!?\\\u{ab}\u{bb}\u{d7}\u{f7}\u{2026}\u{2200}-\u{22ff}] }
+  Operator {
+    operatorChar+ |
+    // `%` and `&` are also sigils. Keeping them out of operator runs lets
+    // `*%opts` and `|&code` end in a variable.
+    "%" "%"? "="? | "&" "&"? "="? |
+    ".." "."? "^"? | ".=" | "::"? ":=" |
+    // A backslashed bracket or quote, as found in regexes, does not nest.
+    // A stopgap until regexes are tokenized as such.
+    "\\" $[{}\[\]"'#]
+  }
+
+  "{" "}" "(" ")" "[" "]"
+  "," ";" ":" "."
+}
+
+@detectDelim

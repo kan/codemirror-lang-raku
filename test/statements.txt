@@ -1,0 +1,130 @@
+# Conditionals
+
+if $a == 1 { } elsif $b { } else { }
+unless $c { }
+
+==>
+
+Program(if, VariableName, Operator, Number, Block,
+  elsif, VariableName, Block, else, Block,
+  unless, VariableName, Block)
+
+# Loops
+
+for @list -> $item { next if $item eq 'a'; last }
+while True { redo }
+loop (my $i = 0; $i < 3; $i++) { }
+
+==>
+
+Program(
+  for, VariableName, Operator, VariableName,
+  Block(next, if, VariableName, eq, StringLiteral, last),
+  while, True, Block(redo),
+  loop, Parens(my, VariableName, Operator, Number, VariableName, Operator, Number,
+    VariableName, Operator),
+  Block)
+
+# Given and when
+
+given $x { when 1 { } default { } }
+
+==>
+
+Program(given, VariableName, Block(when, Number, Block, default, Block))
+
+# Scope declarators
+
+my $a; our $b; has $.c; state $d; temp $e; let $f;
+
+==>
+
+Program(my, VariableName, our, VariableName, has, AttributeName,
+  state, VariableName, temp, VariableName, let, VariableName)
+
+# Module loading
+
+use Foo::Bar; need Baz; import Qux; require Quux; no strict;
+
+==>
+
+Program(use, TypeName, need, TypeName, import, TypeName, require, TypeName,
+  no, Identifier)
+
+# Phasers
+
+BEGIN { } END { } CATCH { default { } }
+
+==>
+
+Program(BEGIN, Block, END, Block, CATCH, Block(default, Block))
+
+# Word operators
+
+$a and $b or not $c; $a div $b; $a cmp $b
+
+==>
+
+Program(VariableName, and, VariableName, or, not, VariableName,
+  VariableName, div, VariableName,
+  VariableName, cmp, VariableName)
+
+# Words that are operators only in operator position stay names
+
+x => 1, max(1, 2), 'ab' x 3
+
+==>
+
+Program(Identifier, Operator, Number, Identifier, Parens(Number, Number),
+  StringLiteral, Identifier, Number)
+
+# A hyphenated word is not a keyword
+
+is-prime if-then for-each
+
+==>
+
+Program(Identifier, Identifier, Identifier)
+
+# Symbolic operators
+
+$a ?? $b !! $c; $x++; $a ~~ $b; $a := $b; $a ::= $b; $a <=> $b; $s .= trim
+
+==>
+
+Program(VariableName, Operator, VariableName, Operator, VariableName,
+  VariableName, Operator,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, Identifier)
+
+# Unicode operators
+
+@a».foo; $a ≤ $b; 1 … 10; $x ∈ $set; $a × $b
+
+==>
+
+Program(VariableName, Operator, MethodCall(MethodName),
+  VariableName, Operator, VariableName,
+  Number, Operator, Number,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName)
+
+# Brackets
+
+foo(1, [2, 3], {a => 4})
+
+==>
+
+Program(Identifier, Parens(Number, Brackets(Number, Number),
+  Block(Identifier, Operator, Number)))
+
+# Self
+
+self.method; self!private
+
+==>
+
+Program(self, MethodCall(MethodName), self, Operator, Identifier)
