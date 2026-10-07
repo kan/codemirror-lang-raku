@@ -60,13 +60,40 @@ node -e 'import("./dist/index.js").then(m => console.log(m.rakuLanguage.parser.p
 ワークフローは npm へ公開しないし、npm の認証情報も持たない（公開は取り消せないので、タグの
 push だけで公開まで進む経路を作らない。2026-10-07 にユーザーが決定）。
 
-1. `npm version 0.2.0 --no-git-tag-version` で版を上げる。`package.json` と `package-lock.json` が
+1. **その版で足した機能のサンプルを足し、エラーが出ないことを確かめる**（後述）。見つかった
+   不具合は、版を上げる前に直す
+2. `npm version 0.2.0 --no-git-tag-version` で版を上げる。`package.json` と `package-lock.json` が
    そろって書き換わり、コミットとタグは作られない
-2. CHANGELOG の `## Unreleased` の見出しを `## 0.2.0 (2026-10-07)` の形（版の番号と公開日）に直す
-3. `npm test` と `npm pack --dry-run` を通し、コミットして push する。その push に対する
+3. CHANGELOG の `## Unreleased` の見出しを `## 0.2.0 (2026-10-07)` の形（版の番号と公開日）に直す
+4. `npm test` と `npm pack --dry-run` を通し、コミットして push する。その push に対する
    `test.yml` の成功を待つ
-4. **ユーザーが**、手順 3 のコミットを checkout した状態で `npm publish` を実行する
-5. `v0.2.0` の形のタグを、手順 3 のコミットに付けて push する
+5. **ユーザーが**、手順 4 のコミットを checkout した状態で `npm publish` を実行する
+6. `v0.2.0` の形のタグを、手順 4 のコミットに付けて push する
+
+### 手順 1: 追加した機能のサンプル
+
+CHANGELOG のその版の節に「New features」があるときは、`test/fixtures/new-in-<版>.raku`
+（`new-in-0.2.raku` の形。版は major と minor）を足す。
+
+- 「New features」の項目ごとに、その機能を使う短いコードを 1 つ以上書く。項目の内容をコメントで
+  添える。補完とインデントのように木に出ない機能は、試し方をコメントに書く
+- 機能を 1 つずつ別々に試すのではなく、1 つの文書に並べる。機能どうしが隣り合ったときの
+  不具合を拾うため
+- `npm test` を通す。フィクスチャは、エラーノードが無いこと（`fixtures`）、先読みを記録しない
+  こと（`lookahead`）、乱数の編集のあとで全体パースと一致すること（`incremental parsing`）を
+  検査される
+- 木を読んで、意図したノードになっていることを確かめる（「コマンド」の節の `node -e`）。
+  エラーノードが無くても、文字列がコードとして読まれているような誤読はここでしか分からない
+- デモ（`npm run dev`）は `test/fixtures/` を読むので、足したサンプルは一覧の先頭に出る
+
+「New features」が無い版（不具合の修正だけの版）では、サンプルのファイルを足さない。直した
+不具合を再現するコードを、既存のフィクスチャか `test/test.js` に足してあることを確かめる。
+
+0.2.0 はこの手順を踏まずに公開し、公開のあとでサンプルを足したところ、`incremental parsing` が
+落ちて不具合が 2 件見つかった（`qq[…]` の入れ子の区切り、引用のあとの heredoc）。この手順は
+そのために足した（2026-10-07 にユーザーが決定）。
+
+### 手順 5 と 6: 公開の前の検査と、Releases への登録
 
 `npm publish` は、先に `prepublishOnly` で `npm test` と `scripts/release-notes.js --check` を実行する。
 CHANGELOG にその版の見出し（日付つき）と本文が無いとき、コミットしていない変更があるときは、
