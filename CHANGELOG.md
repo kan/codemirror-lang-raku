@@ -23,6 +23,10 @@
 - Completion offers the names that the document declares: the variables
   and attributes in scope, routines, classes, enums, subsets and
   constants, and after a `.` the methods.
+- Completion also offers placeholder variables (`$^a`) in their block,
+  and variables without a sigil (`my \x`).
+- A line that starts with a trait, as in `is export {` under
+  `sub f($a)`, is indented as the continuation of its statement.
 - Toggling a block comment picks brackets that fit the selection:
   `` #`[ … ] `` when the selection holds an unbalanced parenthesis, and so
   on. A comment is removed whichever bracket it was written with.

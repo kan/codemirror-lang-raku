@@ -7,7 +7,7 @@ import {styleTags, tags as t} from "@lezer/highlight"
 import {Extension} from "@codemirror/state"
 import {rakuCompletionSource} from "./complete"
 import {keywordTags} from "./keywords"
-import {statementIndent, topIndent} from "./indent"
+import {statementIndent, topIndent, indentOnInput} from "./indent"
 import {embeddedCommentTokens} from "./comment"
 
 // A regex literal is one token to the parser of a program: whether it
@@ -102,7 +102,7 @@ const baseLanguage = LRLanguage.define({
     // An embedded comment can use any bracket. Parentheses are the usual choice.
     commentTokens: {line: "#", block: {open: "#`(", close: ")"}},
     closeBrackets: {brackets: ["(", "[", "{", "'", '"', "「"]},
-    indentOnInput: /^\s*[\}\]\)]$/
+    indentOnInput
   }
 })
 

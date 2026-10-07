@@ -12,12 +12,22 @@ const wordOperators = /^(and|or|xor|andthen|orelse|notandthen|div|mod|gcd|lcm|eq
 // Operators that end a term or stand for a whole statement.
 const closingOperators = /^(\+\+|--|\.\.\.|!!!|\?\?\?)$/
 
+// The words that start a trait. `of` is left out: it is as often a
+// name of one's own.
+const traits = "is|does|returns|handles|where|will"
+
+/// The lines that are indented again when they are typed: one that
+/// closes a bracket, and one that starts with a trait, which is only
+/// known to continue a statement once the trait's word is there.
+export const indentOnInput = new RegExp("^\\s*(?:[\\}\\]\\)]|(?:" + traits + ")\\s)$")
+
 // A line that starts with an infix: an operator that has a space after
-// it and more on the line, an operator that is a word, or a statement
-// modifier. A prefix operator touches its operand, and `...` stands
-// alone.
+// it and more on the line, an operator that is a word, a statement
+// modifier, or a trait (`is export`). A prefix operator touches its
+// operand, and `...` stands alone.
 const startsWithInfix = new RegExp("^\\s*(?:[~+\\-*/%<>=|&^?!]+[ \\t]+\\S|(?:" + wordOperators.source.slice(2, -2) +
-                                   "|if|unless|for|while|until|given|when|with|without)(?![\\w'-]))")
+                                   "|if|unless|for|while|until|given|when|with|without" +
+                                   "|" + traits + ")(?![\\w'-]))")
 const startsWithMethod = /^\s*\.[^\s\d.]/
 
 // The last token of `node`. A string, a regex, a heredoc and a Pod

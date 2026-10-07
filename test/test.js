@@ -511,6 +511,26 @@ while $a
   say 5;
 }`))
 
+  it("indents a line that starts with a trait", keeps(`
+sub f($a)
+  is export {
+  say 1;
+}
+class A
+  is B
+  does C {
+  has $.x
+    is rw
+    where * > 0;
+  method m(--> Int)
+    returns Int {
+    2
+  }
+}
+say 3;
+is 1, 1;
+is-deeply 1, 1;`))
+
   it("indents after a subscript in braces, and after a comment", keeps(`
 my $v = %h{$key}
   // 'default';
@@ -865,6 +885,31 @@ sub other($elsewhere) { my $inner; state $kept }
     assert.strictEqual(complete("'a |'", true), null)
     assert.strictEqual(complete("token t {|}", true), null)
     assert.strictEqual(complete("token t { |a }", true), null)
+  })
+
+  it("offers placeholder variables in their block", () => {
+    assert.ok(complete("my &f = { $^first + $^| };").includes("$^first"))
+    assert.ok(complete("my &f = { $^first + $| };").includes("$^first"))
+    assert.ok(!complete("my &f = { $^first + $^sec| };").includes("$^sec"))
+    assert.ok(!(complete("my $x; { $^first }; $|") || []).includes("$^first"))
+    assert.ok(complete("my &f = { $:named + $:| };").includes("$:named"))
+    assert.ok(complete("my &f = { $^alpha + 1; say $al| };").includes("$alpha"))
+  })
+
+  it("takes a placeholder variable in a subscript to be one of the block around it", () => {
+    assert.ok(complete("@a.sort: { %rank{$^left} <=> %rank{$^| } }").includes("$^left"))
+    assert.ok(complete("my &f = { %h{$^key} + $^| };").includes("$^key"))
+    assert.ok(!(complete("{ { $^inner } }; $|") || []).includes("$^inner"))
+  })
+
+  it("offers variables without a sigil", () => {
+    assert.ok(complete("my \\total = 1; say tot|").includes("total"))
+    assert.ok(complete("sub f(\\item, $n) { say ite| }").includes("item"))
+    assert.ok(complete("for @a -> \\item { say ite| }").includes("item"))
+    assert.ok(complete("my \\N = 2; say N|", true).includes("N"))
+    assert.ok(!complete("say \\total; say tot|").includes("total"))
+    assert.strictEqual(complete("my \\tot|"), null)
+    assert.ok(complete("my \\total = 1; f(\\tot|)").includes("total"))
   })
 
   it("completes in the code of a heredoc that interpolates", () => {

@@ -145,8 +145,10 @@ Not supported yet:
   methods and every method that the document declares, whatever the
   invocant is. Names from other files are not offered.
 - Completion takes a variable to be declared by `my`, `our`, `state` or
-  `has`, in a signature, or after the `->` of a pointy block. Placeholder
-  variables (`$^a`) and sigilless variables (`my \x`) are not offered.
+  `has`, in a signature, after the `->` of a pointy block, or by being a
+  placeholder variable (`$^a`, `$:a`). A sigilless variable is offered
+  when it is declared with a backslash (`my \x`, `sub f(\x)`, `-> \x`),
+  not as a term (`my constant x`, `sub term:<x>`).
 - In a string, only the code in `{ }` and in a subscript is completed,
   not the method name of `"$x.name()"`.
 
@@ -154,10 +156,13 @@ Heuristics that can be wrong:
 
 - A line is indented as the continuation of a statement when the line
   before it ends in an operator or a comma, or when it starts with a
-  method call or with an operator that has a space after it. A statement
-  that continues in another way, as in a trait on its own line
-  (`sub f($a)` / `is export {`), is not indented further. Inside `( )`
-  and `[ ]`, indentation follows the brackets only.
+  method call, with an operator that has a space after it, or with a
+  trait (`is`, `does`, `returns`, `handles`, `where`, `will`, as in
+  `is export {`). A statement that continues in another way is not
+  indented further. A line that starts with one of these words for
+  another reason, such as a call of the `is` of `Test`, is indented when
+  the line before it does not end in a `;` or a `}`. Inside `( )` and
+  `[ ]`, indentation follows the brackets only.
 - A capitalized word is taken to be a type name.
 - Whether `/` starts a regex and `<` starts a word list is decided from
   the token before it. After a bare name, spacing decides: `say /x/` and
