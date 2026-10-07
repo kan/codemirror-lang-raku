@@ -125,11 +125,10 @@ Not supported yet:
   code block inside another block, nor in an indented code paragraph.
   Tables and the configuration after a directive (`:numbered`) are plain
   text.
-- A `<<…>>` or `«…»` word list that spans lines and holds `{ }`, `( )` or
-  `;` is not taken to be a word list, and neither is one in a subscript
-  or after a pair key (`%h«$key»`, `:a<<b $c>>`). Nothing is interpolated
-  in one that is longer than 24 characters, or that holds an unbalanced
-  `{` or its own delimiter: it is a single token.
+- A `<<…>>` or `«…»` word list that holds `{ }`, `( )` or `;` can span up
+  to 10 lines. A longer one is not taken to be a word list. Nothing is
+  interpolated in a list that holds an unbalanced `{` or its own
+  delimiter: it is a single token.
 - A Pod block is read where a statement or a term can stand, not
   everywhere that whitespace can: one between `class` and the name of
   the class is not read as Pod.
@@ -168,7 +167,19 @@ Heuristics that can be wrong:
   routine of your own has one of these names. After a closing brace, a
   line break decides.
 - A `<…>` right after a term is a subscript only when it holds plain words
-  on one line: `%h<key>`, but not `$a<$b`.
+  on one line: `%h<key>`, but not `$a<$b`. A `<<…>>` or `«…»` that touches
+  the term before it is a subscript when it is at most 24 characters
+  long and starts and ends in a word, a variable or a quote: `%h«$key»`,
+  but not the hyper operators of `@a<<+>>@b` and `@a«R-»@b`. A hyper
+  operator that is a word and touches both of its operands, as in
+  `@a<<min>>@b`, is misread as a subscript.
+- A `<<` or `«` where a term is expected starts a word list when a `>>`
+  or `»` follows, within 10 lines if there is a `{ }`, `( )` or `;` in
+  between. One that is being typed takes the code up to there for its
+  content.
+- In a `<<…>>` word list, a `>>` in a subscript or a call that is
+  interpolated ends the list: `<<@a[1 >> 2]>>`. A heredoc that is opened
+  in a block in a word list or in a regex literal is not read as one.
 - `q`, `qq`, `Q`, `m`, `rx`, `s`, `tr` and their variants start a quote
   when a delimiter follows directly, so a sigilless `s/2` is misread.
   `q`, `qq` and `Q` also take a bracket after blanks (`q {…}`), so a

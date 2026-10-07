@@ -204,13 +204,71 @@ Program(Identifier,
   Identifier, StringLiteral, Number, Operator, Number, VariableName, Operator, VariableName,
   VariableName, Operator, MethodCall(MethodName))
 
-# A long word list with double angles is one token
+# A long word list with double angles
 
 say <<a rather long list of $words that { goes } on>>, 1;
+my @words = «
+  a list of {
+    $several
+  } lines, with @items[0] and %table<key> in it
+  (and a pair of parentheses); with a semicolon
+»;
+say <<a { "b $c".uc } d>>, 2;
 
 ==>
 
-Program(Identifier, StringLiteral, Number)
+Program(Identifier, StringLiteral(VariableName, Interpolation(Identifier)), Number,
+  my, VariableName, Operator,
+  StringLiteral(Interpolation(VariableName), VariableName, Brackets(Number), VariableName),
+  Identifier, StringLiteral(Interpolation(StringLiteral(VariableName), MethodCall(MethodName))), Number)
+
+# A word list with double angles that is not closed within a few lines
+
+my @a = <<
+  a;
+  b { }
+
+
+  c
+
+
+
+  d
+
+  e
+>>;
+say 1;
+
+==>
+
+Program(my, VariableName, Operator, Operator, Identifier, Identifier, Block, Identifier, Identifier, Identifier,
+  Operator, Identifier, Number)
+
+# Double-angle subscripts, and double angles after a pair key
+
+%h«$key»; %h<<$k $l>>; :a<<b $c>>; $x«a b»; %h<<k>>; %h<<'a b' c>>;
+@a<<+>>@b; @a<<~>> @b; %h<<+>>; 1<<2; @a >>+<< @b; $a << 2 >> 1; @a«×»@b; @a«R-»@b; @a<<Z+>>@b;
+%h<<a key that is too long to be a subscript>>;
+
+==>
+
+Program(VariableName, StringLiteral(VariableName),
+  VariableName, StringLiteral(VariableName, VariableName),
+  PairKey, StringLiteral(VariableName),
+  VariableName, StringLiteral,
+  VariableName, StringLiteral,
+  VariableName, StringLiteral,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator,
+  Number, Operator, Number,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, Number, Operator, Number,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, TypeName, Operator, VariableName,
+  VariableName, Operator, TypeName, Operator, VariableName,
+  VariableName, Operator, Identifier, Identifier, Identifier, is, Identifier, Identifier, Identifier, Identifier,
+  Identifier, Identifier, Operator)
 
 # Less-than is not a word list
 

@@ -110,7 +110,14 @@ say $half < 3 ?? 'small' !! 'big';
 say <a b c>.elems, ' ', (%*ENV<HOME> // '~');
 
 # Word lists that interpolate.
-my @words = <<plain $n {$half}>>, «$hex.fmt('%x') last», <<a long list, in which $n is not interpolated>>;
+my @words = <<plain $n {$half}>>, «$hex.fmt('%x') last», <<a long list, in which $n is interpolated as well>>;
+my %count = one => 1, two => 2;
+my $key = 'one';
+say %count«$key», %count<<$key two>>, :pair<<a $key>>, @words >>~>> '!';
+my @lines = «
+  first { $n + 1 };
+  second ($half)
+»;
 
 # A string that spans lines, with interpolation on each of them.
 my $report = "Total: $n

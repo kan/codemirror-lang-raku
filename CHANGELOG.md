@@ -18,7 +18,8 @@
   `qq:to` heredoc. Its `Heredoc` node has the children of a string that
   interpolates.
 - Variables, blocks and escapes are interpolated in `<<…>>` and `«…»`
-  word lists of up to 24 characters.
+  word lists. Such a list can hold code over several lines, and can be
+  a subscript: `%h«$key»`, `:a<<b $c>>`.
 - Completion offers the names that the document declares: the variables
   and attributes in scope, routines, classes, enums, subsets and
   constants, and after a `.` the methods.

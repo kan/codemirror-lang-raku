@@ -37,7 +37,8 @@ nonBlock {
   TypeName |
   Number |
   Version |
-  StringLiteral |
+  quotedString |
+  interpolatingWordList |
   regexLiteral |
   transliteration |
   PairKey |
@@ -138,11 +139,16 @@ TypeName { capIdentifier (smiley | noSmiley) }
   // parsed over the text of that token.
   @top HeredocText[@name=Heredoc] { heredocStart quotePart* quoteEnd }
 
-  StringLiteral {
+  quotedString[@name=StringLiteral] {
     // A quote that does not interpolate is one token.
     rawString |
     quoteStart quotePart* quoteEnd
   }
+
+  // The inside of a <<...>> word list, which interpolates. The parser
+  // of Program reads the list as one token, interpolatingWordList, and
+  // this rule is parsed over the text of that token.
+  @top WordList[@name=StringLiteral] { quoteStart quotePart* quoteEnd }
 
   quotePart {
     quoteContent | quoteNestOpen | quoteNestClose | Escape | Interpolation |
@@ -223,7 +229,7 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 @external tokens quoteToken from "./tokens" { quoteContent, quoteNestOpen, quoteNestClose, quoteEnd }
 // Tokens that depend on whether a term or an operator is expected.
 @external tokens termToken from "./tokens" {
-  rawString, quoteStart, regexLiteral[@name=Regex], transliteration[@name=Regex], plainName, wordOperator[@name=Operator],
+  rawString, quoteStart, interpolatingWordList[@name=StringLiteral], regexLiteral[@name=Regex], transliteration[@name=Regex], plainName, wordOperator[@name=Operator],
   // The name after `multi`, `proto` or `only`, when no declarator follows.
   multiName,
   // &infix:<+>

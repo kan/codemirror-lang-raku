@@ -9,7 +9,7 @@ import {
   Identifier, TypeName, StringLiteral, Interpolation, self, True, False, Nil, multi, proto, only,
   PackageName, RoutineName, methodRoutineName, RegexName, EnumName, SubsetName, ConstantName,
   methodDot, declaredName, declaredMethodName, smiley, noSmiley, plainName, multiName, multiRoutineName, wordOperator,
-  rawString, quoteStart, quoteContent, quoteNestOpen, quoteNestClose, quoteEnd,
+  rawString, quoteStart, quoteContent, quoteNestOpen, quoteNestClose, quoteEnd, quotedString, interpolatingWordList,
   regexBody, regexStart, regexBodyEnd, regexLitOpen, regexLitClose,
   regexText, CharacterClass, Assertion, regexQuote, regexOperator, regexComment,
   regexBlockComment, regexCapture
@@ -293,12 +293,17 @@ class Context {
   }
 }
 
+// The nodes of a string: a quote, the token of a word list that
+// interpolates, and the tree of its inside, which takes the place of
+// that token.
+const stringTerms = new Set([quotedString, interpolatingWordList, StringLiteral])
+
 // The mode after a token or a node, for those where the term settles
 // it. Shifting a token and reusing a node both look here, so that they
 // agree.
 const termModes = new Map<number, Mode>()
 for (let term of [VariableName, AttributeName, SpecialVariable, operatorVariable, NumberTerm, radixNumber, Version, MethodName,
-                  PairKey, rawString, quoteEnd, StringLiteral, regexLiteral, transliteration, regexBody,
+                  PairKey, rawString, quoteEnd, ...stringTerms, regexLiteral, transliteration, regexBody,
                   // The tree of the inside of a regex literal, which takes the
                   // place of the literal's token in a node that is reused.
                   Regex, self, True, False, Nil,
@@ -403,20 +408,24 @@ function hasNewline(input: InputStream, from: number, to: number) {
 // and the text of a heredoc close the ones before them.
 function heredocsAfter(node: Tree, input: InputStream, before: readonly OpenHeredoc[]) {
   // Most reused nodes are single tokens.
-  if (!node.children.length && node.type.id != StringLiteral && !heredocTerms.has(node.type.id)) return before
+  if (!node.children.length && !stringTerms.has(node.type.id) && !heredocTerms.has(node.type.id)) return before
   let cursor = node.cursor(), found: {pos: number, heredoc: OpenHeredoc}[] = [], closedAt = -1
   // Goes over the node at the cursor from its end, and tells whether
   // the heredocs before some point in it are closed.
   function scan(): boolean {
     let type = cursor.type.id, {from, to} = cursor
     if (heredocTerms.has(type)) { closedAt = to; return true }
-    if (type == StringLiteral) {
+    let isString = stringTerms.has(type)
+    if (isString) {
       let heredoc = heredocAt(input, from)
       if (heredoc) found.push({pos: from, heredoc})
     }
+    // The tree of the inside of a regex literal or of a word list. It
+    // was one token when it was shifted, which opens no heredoc.
+    if (type == Regex || type == StringLiteral) return false
     if (!cursor.lastChild()) return false
     // Between the pieces of a string lies its text, not whitespace.
-    let gaps = type != StringLiteral
+    let gaps = !isString
     for (let gapEnd = to;;) {
       if (gaps && hasNewline(input, cursor.to, gapEnd)) { closedAt = gapEnd; break }
       if (scan()) break
@@ -985,26 +994,57 @@ function regexOpening(input: InputStream) {
 // `<` does not swallow the code up to some later `>`. `strict` is for
 // a subscript, which has to be on one line, and cannot hold what
 // would make it a comparison: `$a<5 && $b>3`.
+//
+// A list with double angles is rarely a stray operator, and may hold
+// code over a few lines. Not over more: one that is being typed would
+// swallow the code up to some later `>>`.
 function wordListEnd(input: InputStream, strict: boolean) {
   let open = input.next, close = open == Ch.GuillemetOpen ? Ch.GuillemetClose : Ch.Greater
   let count = open == Ch.Less && input.peek(1) == Ch.Less ? 2 : 1
-  for (let pos = count, lines = 0, code = false;; pos++) {
+  let codeLines = open == Ch.GuillemetOpen || count == 2 ? maxCodeWordListLines : 1
+  for (let pos = count, lines = 1, code = false;; pos++) {
     let ch = input.peek(pos)
     if (ch == close && repeats(input, pos, close, count)) return pos + count
     if (ch < 0) return -1
     if (ch == Ch.Newline) lines++
     else if (ch == Ch.Semicolon || ch == Ch.BraceOpen || ch == Ch.BraceClose ||
              ch == Ch.ParenOpen || ch == Ch.ParenClose) code = true
-    if (lines && (code || strict)) return -1
+    if (lines > 1 && (code && lines > codeLines || strict)) return -1
     if (strict && (code || ch == Ch.Dollar || ch == Ch.At || ch == Ch.Percent || ch == Ch.Amp ||
                    ch == Ch.Pipe || ch == Ch.Equals || ch == Ch.Comma || ch == Ch.Question ||
                    ch == Ch.Bang || ch == Ch.DoubleQuote || ch == Ch.Less)) return -1
   }
 }
 
-// The length up to which a <<...>> word list is read as a quote that
-// interpolates. See termToken.
-const maxInterpolatedWordList = 24
+// How many lines a <<...>> list that holds code may span.
+const maxCodeWordListLines = 10
+
+// How long a <<...>> subscript can be. Whether it is closed is found
+// out from its start, and a token must not look far past its end.
+const maxDoubleSubscript = 24
+
+// Whether a character can start or end the content of a <<...>>
+// subscript: part of a word, a variable or a quote. An operator
+// character cannot, which tells the hyper operators apart: @a<<+>>@b,
+// @a«R-»@b
+function isSubscriptEdge(ch: number) {
+  return isIdentifierStart(ch) || isDigit(ch) || ch == Ch.Apostrophe || ch == Ch.DoubleQuote
+}
+
+// The offset after the <<...>> subscript at the current position, with
+// the given opening, or -1. It is short, on one line, and holds no
+// punctuation of statements.
+function doubleSubscriptEnd(input: InputStream, {start, close, count}: Opening) {
+  let first = input.peek(start)
+  if (!isSubscriptEdge(first) && first != Ch.Dollar && first != Ch.At && first != Ch.Percent && first != Ch.Amp) return -1
+  for (let pos = start; pos < maxDoubleSubscript; pos++) {
+    let ch = input.peek(pos)
+    if (ch == close && repeats(input, pos, close, count)) return isSubscriptEdge(input.peek(pos - 1)) ? pos + count : -1
+    if (ch < 0 || ch == Ch.Newline || ch == Ch.Semicolon || ch == Ch.BraceOpen || ch == Ch.BraceClose ||
+        ch == Ch.ParenOpen || ch == Ch.ParenClose) return -1
+  }
+  return -1
+}
 
 // Whether every `{` between two offsets has its `}` there, and the
 // other way around.
@@ -1044,7 +1084,13 @@ function isWordOperator(name: string) {
 
 // The tokens that depend on whether a term or an operator is expected.
 export const termToken = new ExternalTokenizer((input, stack) => {
-  if (!stack.canShift(regexLiteral)) return
+  if (!stack.canShift(regexLiteral)) {
+    // At the start of the parse of the inside of a word list that
+    // interpolates, its opening delimiter.
+    let opening = context(stack) == startContext && stack.canShift(quoteStart) ? wordListOpening(input, 0) : null
+    if (opening) input.acceptToken(quoteStart, opening.start)
+    return
+  }
   let next = input.next, {mode} = context(stack)
 
   if (isIdentifierStart(next)) {
@@ -1096,29 +1142,28 @@ export const termToken = new ExternalTokenizer((input, stack) => {
     }
     return
   } else if (next == Ch.Less || next == Ch.GuillemetOpen) {
-    let end
+    let end, opening = wordListOpening(input, 0)
     if (inTermPosition(input, mode, 1)) {
       // [<] and [<=] are reductions, <-> starts a pointy block.
       let after = input.peek(1)
       if (after == Ch.Equals || after == Ch.BracketClose || after == Ch.Hyphen && input.peek(2) == Ch.Greater) return
       end = wordListEnd(input, false)
-      // <<a $b>> and «a $b» interpolate. They are read piece by piece,
-      // by rules that count nested delimiters, escapes and the braces
-      // of blocks. A list that those rules would end elsewhere stays
-      // one token.
-      //
-      // Only a short list is read that way. Finding the end of the list
-      // means looking ahead from its opening token, and a token that
-      // looks more than 25 characters past its end keeps the parser
-      // from reusing the tokens before it. A longer list is one token.
-      let opening = end > 0 && end <= maxInterpolatedWordList ? wordListOpening(input, 0) : null
-      if (opening && rawEnd(input, opening.start, opening) == end && hasBalancedBraces(input, opening.start, end))
-        return input.acceptToken(quoteStart, opening.start)
+    } else if (opening && !isSpace(input.peek(-1))) {
+      // A subscript with double angles, which touches its term:
+      // %h«$key», :a<<b $c>>
+      end = doubleSubscriptEnd(input, opening)
     } else {
       end = subscriptEnd(input)
     }
-    if (end > 0) input.acceptToken(rawString, end)
-    return
+    if (end <= 0) return
+    // <<a $b>> and «a $b» interpolate. The list is one token here:
+    // that it is closed has to be known where it starts. Its inside
+    // is parsed again, piece by piece (see index.ts), by rules that
+    // count nested delimiters, escapes and the braces of blocks. A
+    // list that those rules would end elsewhere is not read inside.
+    let interpolates = opening && rawEnd(input, opening.start, opening) == end &&
+      hasBalancedBraces(input, opening.start, end)
+    return input.acceptToken(interpolates ? interpolatingWordList : rawString, end)
   } else if (next == Ch.Slash) {
     if (input.peek(1) == Ch.Slash || !inTermPosition(input, mode, 1)) return
     let end = regexTokenEnd(input, slashOpening)
