@@ -1,4 +1,4 @@
-## Unreleased
+## 0.4.0 (2026-10-07)
 
 Most of this was found by parsing the test suite of
 [mutsu](https://github.com/tokuhirom/mutsu), an implementation of Raku.
