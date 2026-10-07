@@ -132,6 +132,10 @@ Not supported yet:
 - A Pod block is read where a statement or a term can stand, not
   everywhere that whitespace can: one between `class` and the name of
   the class is not read as Pod.
+- In a quote that has braces for delimiters, a `{ }` is taken to be a
+  nested pair of the delimiters, not a block of code: the `{$b + 1}` of
+  `qq{a {$b + 1} c}` is text, in which `$b` is interpolated. With other
+  delimiters, as in `qq[a {$b + 1} c]`, it is a block.
 - A quote adverb is switched off by the argument `False` or `0`, as in
   `qq:c(False)[…]`. With any other argument, such as a variable, it
   counts as switched on.
