@@ -222,6 +222,18 @@ npm run dev  # serves demo/, an editor next to the syntax tree of its content
 
 The demo loads the sources, so a change to the grammar shows up on reload.
 
+To release a version:
+
+1. Run `npm version 1.2.3 --no-git-tag-version`, and turn the
+   `## Unreleased` heading of `CHANGELOG.md` into `## 1.2.3 (2026-01-31)`.
+   Commit and push.
+2. Run `npm publish` from that commit. It first runs the tests and checks
+   that `CHANGELOG.md` has that section and that nothing is uncommitted.
+3. Tag that commit `v1.2.3` and push the tag. A workflow then checks that
+   the tag matches `package.json` and that npm has the version, published
+   from that commit, and creates the GitHub release from the section of
+   `CHANGELOG.md`.
+
 ## License
 
 [MIT](LICENSE)

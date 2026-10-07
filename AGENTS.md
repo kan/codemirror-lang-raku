@@ -18,6 +18,8 @@ CodeMirror 6 用の Raku（旧 Perl 6）言語サポートを作るリポジト�
 ## やってはいけないこと
 
 - **`npm publish` を実行しない。** ユーザーの明示的な指示があるときだけ行う
+- **`v*` のタグを作らない、push しない。** ユーザーの明示的な指示があるときだけ行う。タグの push で
+  GitHub Releases に登録されるため（後段「公開の手順」）
 - **コミット、push、バージョン bump を自発的にしない。** 必要だと思ったら提案して承認を得る
 - **`@codemirror/*` と `@lezer/*` のスコープ名でパッケージを作らない。** 公式専用
 - **他エディタの Raku 定義（TextMate 文法、Emacs の raku-mode、Vim の syntax ファイルなど）を
@@ -52,6 +54,42 @@ node -e 'import("./dist/index.js").then(m => console.log(m.rakuLanguage.parser.p
 
 ---
 
+## 公開の手順
+
+**どの手順も、ユーザーの指示があるときだけ行う。`npm publish` はユーザーが手元で実行する。**
+ワークフローは npm へ公開しないし、npm の認証情報も持たない（公開は取り消せないので、タグの
+push だけで公開まで進む経路を作らない。2026-10-07 にユーザーが決定）。
+
+1. `npm version 0.2.0 --no-git-tag-version` で版を上げる。`package.json` と `package-lock.json` が
+   そろって書き換わり、コミットとタグは作られない
+2. CHANGELOG の `## Unreleased` の見出しを `## 0.2.0 (2026-10-07)` の形（版の番号と公開日）に直す
+3. `npm test` と `npm pack --dry-run` を通し、コミットして push する。その push に対する
+   `test.yml` の成功を待つ
+4. **ユーザーが**、手順 3 のコミットを checkout した状態で `npm publish` を実行する
+5. `v0.2.0` の形のタグを、手順 3 のコミットに付けて push する
+
+`npm publish` は、先に `prepublishOnly` で `npm test` と `scripts/release-notes.js --check` を実行する。
+CHANGELOG にその版の見出し（日付つき）と本文が無いとき、コミットしていない変更があるときは、
+公開の前に止まる。
+
+タグの push で `.github/workflows/release.yml` が動き、次の順に確かめてから GitHub Releases に
+登録する。どれかが成り立たなければ失敗し、Releases はできない。
+
+- タグが `package.json` の `version` と一致し、そのコミットが main にある
+- CHANGELOG に、その版の見出し（日付つき）と本文がある（`scripts/release-notes.js`）
+- `npm test` が通る
+- その版が npm にある。反映を待って、30 秒おきに 20 回まで確かめる
+- npm が記録している公開元のコミット（`gitHead`）が、タグのコミットと同じである
+
+Releases の本文は CHANGELOG のその版の節で、題は版の番号。同じタグの Releases がすでにあれば、
+本文を上書きする。`-` を含む版（`1.0.0-rc.1`）はプレリリースとして登録する。
+
+npm への反映が間に合わずに失敗したときは、Actions の画面から再実行する。それ以外の失敗は、
+再実行しても同じタグのコミットを読むので直らない。原因をユーザーに報告し、タグを付け替えるか
+どうかの指示を待つ。**タグの削除と付け替えを自分の判断でしない。**
+
+---
+
 ## 構成
 
 | パス | 内容 |
@@ -70,7 +108,9 @@ node -e 'import("./dist/index.js").then(m => console.log(m.rakuLanguage.parser.p
 | `test/fixtures/*.raku` | エラーノード無しでパースできるべき実コード |
 | `test/test.js` | 上の 2 つに加え、ハイライト、識別子の文字範囲の一致、増分パース、インデント、折りたたみ、括弧の対応、補完、export の検査 |
 | `demo/` | 動作確認用のページ。エディタと、その内容の構文木を並べて出す。npm には含めない |
-| `CHANGELOG.md` | 利用者向けの変更履歴（英語）。挙動か公開インターフェースを変えたら、未リリースの版の節に足す |
+| `CHANGELOG.md` | 利用者向けの変更履歴（英語）。挙動か公開インターフェースを変えたら、先頭の `## Unreleased` の節に足す。節が無ければ作る |
+| `scripts/release-notes.js` | CHANGELOG から、`package.json` の版の節を取り出す。`release.yml` と `prepublishOnly` が使う。npm には含めない |
+| `.github/workflows/` | `test.yml`（テスト）、`demo.yml`（デモの公開）、`release.yml`（タグの push で GitHub Releases に登録） |
 
 **npm に入るのは `dist/index.*` だけ**（`package.json` の `files`）。`src/index.ts` が別ファイルの型を
 export すると、`dist/index.d.ts` が tarball に無い `./complete` などを参照する。`test/test.js` の
@@ -337,7 +377,7 @@ DESIGN.md「作業フェーズ」に対する現在地。フェーズを終え�
 | 2. 基本ハイライト | 済み。コメント（行、`#|` と `#=`、`` #`( ) ``）、`'…'` と `"…"`（`$var` と `{ }` の補間）、数値、キーワード、変数、ブロック、宣言 |
 | 3. 難所対応 | 済み。クォート構文全般、heredoc、補間（添字、呼び出し、メソッド呼び出し）、正規表現、Pod、単語演算子とメタ演算子。0.1.0 のあとに、Pod の指示行、見出し、書式コード、`<<…>>` と `qq:to` の heredoc の中の補間、正規表現（宣言の本体とリテラル）の色分けを足した |
 | 4. エディタ機能 | 済み。括弧のインデント、折りたたみ（ブロック、括弧、Pod、heredoc、埋め込みコメント）、括弧の対応、固定の一覧による補完。0.1.0 のあとに、文の継続行のインデント、選択範囲に合わせたブロックコメントの括弧、文書内の名前の補完を足した |
-| 5. 公開準備 | 済み。README、CHANGELOG、`demo/`、`npm pack` での中身の確認。0.1.0 を 2026-10-06 に npm へ公開した。0.1.0 のあとの変更は、CHANGELOG の先頭の `## Unreleased` の節に書く。公開するときに、見出しを版の番号と日付へ直す |
+| 5. 公開準備 | 済み。README、CHANGELOG、`demo/`、`npm pack` での中身の確認。0.1.0 を 2026-10-06 に npm へ公開した。公開の手順は「公開の手順」の節にある |
 
 未対応の構文と、誤判定しうる箇所の一覧は README の「Known limitations」にある。対応したら
 そこから消す。

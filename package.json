@@ -21,6 +21,7 @@
     "pretest": "npm run build",
     "test": "mocha test/test.js",
     "prepare": "npm run build",
+    "prepublishOnly": "npm test && node scripts/release-notes.js --check",
     "dev": "vite demo",
     "build:demo": "vite build demo"
   },
