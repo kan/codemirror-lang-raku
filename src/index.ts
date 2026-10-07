@@ -1,5 +1,7 @@
 import {parser as grammarParser} from "./syntax.grammar"
+import {regexLiteral} from "./syntax.grammar.terms"
 import {LRParser} from "@lezer/lr"
+import {parseMixed} from "@lezer/common"
 import {LRLanguage, LanguageSupport, indentNodeProp, foldNodeProp, foldInside, delimitedIndent} from "@codemirror/language"
 import {styleTags, tags as t} from "@lezer/highlight"
 import {Extension} from "@codemirror/state"
@@ -8,14 +10,30 @@ import {keywordTags} from "./keywords"
 import {statementIndent, topIndent} from "./indent"
 import {embeddedCommentTokens} from "./comment"
 
-/// The Lezer parser for Raku, without the editor-specific node props.
-export const parser: LRParser = grammarParser
+// A regex literal is one token to the parser of a program: whether it
+// is closed has to be known where it starts, and a token that is read
+// piece by piece cannot look that far ahead (see AGENTS.md). Its inside
+// is parsed by the same grammar, from the top rule for a regex literal,
+// and that tree takes the place of the token's node. The inner parser
+// is made from `base` so that it has the same props, among them the
+// language data that LRLanguage.define puts on top nodes.
+function nestedParsers(base: LRParser) {
+  // From the term of a token to the parser of its inside. The
+  // generator registers a top rule under its node name.
+  let parsers = new Map<number, {parser: LRParser}>()
+  let wrap = parseMixed(node => parsers.get(node.type.id) || null)
+  // The inner parsers are wrapped as well: a regex can hold a block of
+  // code, and that can hold a regex.
+  parsers.set(regexLiteral, {parser: base.configure({top: "Regex", wrap})})
+  return wrap
+}
 
-/// A language provider based on the Lezer Raku parser, extended with
-/// highlighting and indentation information.
-export const rakuLanguage = LRLanguage.define({
+/// The Lezer parser for Raku, without the editor-specific node props.
+export const parser: LRParser = grammarParser.configure({wrap: nestedParsers(grammarParser)})
+
+const baseLanguage = LRLanguage.define({
   name: "raku",
-  parser: parser.configure({
+  parser: grammarParser.configure({
     props: [
       indentNodeProp.add({
         Program: topIndent,
@@ -85,6 +103,10 @@ export const rakuLanguage = LRLanguage.define({
     indentOnInput: /^\s*[\}\]\)]$/
   }
 })
+
+/// A language provider based on the Lezer Raku parser, extended with
+/// highlighting and indentation information.
+export const rakuLanguage = baseLanguage.configure({wrap: nestedParsers(baseLanguage.parser)})
 
 /// Completion of Raku keywords, of the commonly used built-in types,
 /// routines, methods and special variables, and of the names that the

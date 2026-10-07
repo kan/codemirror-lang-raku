@@ -385,7 +385,7 @@ say 2;
 
 ==>
 
-Program(Identifier, StringLiteral, Operator, VariableName, MethodCall(MethodName), Parens(Regex, Number),
+Program(Identifier, StringLiteral, Operator, VariableName, MethodCall(MethodName), Parens(Regex(Escape), Number),
   StringLiteral, StringLiteral, Heredoc, Identifier, Number)
 
 # A heredoc opener in an interpolation

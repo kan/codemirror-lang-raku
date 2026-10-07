@@ -85,6 +85,25 @@ describe("highlighting", () => {
     ])
   })
 
+  it("styles the pieces of a regex literal", () => {
+    assert.deepStrictEqual(highlight("m:i/ \\d+ <name> { say 1 } /, s/a+/b+/"), [
+      ["m:i/ \\d", "tok-string2"],
+      ["+", "tok-operator"],
+      [" ", "tok-string2"],
+      ["<name>", "tok-variableName"],
+      [" ", "tok-string2"],
+      ["{", "tok-punctuation"],
+      ["say", "tok-variableName"],
+      ["1", "tok-number"],
+      ["}", "tok-punctuation"],
+      [" /", "tok-string2"],
+      [",", "tok-punctuation"],
+      ["s/a", "tok-string2"],
+      ["+", "tok-operator"],
+      ["/b+/", "tok-string2"]
+    ])
+  })
+
   it("styles the pieces of a regex declaration body", () => {
     assert.deepStrictEqual(highlight("token t { \\d+ <name> <[a..z]> 'x' $<y>=. { say 1 } # c\n}"), [
       ["token", "tok-keyword"],
@@ -271,6 +290,20 @@ describe("incremental parsing of heredocs", () => {
       let doc = base.slice(0, from) + insert + base.slice(to)
       let fragments = TreeFragment.applyChanges(TreeFragment.addTree(parser.parse(base)),
                                                 [{fromA: from, toA: to, fromB: from, toB: from + insert.length}])
+      assert.strictEqual(tokens(parser.parse(doc, fragments)), tokens(parser.parse(doc)))
+    })
+  }
+})
+
+// The inside of a regex literal is a tree of its own. What follows a
+// literal at the end of a reused node is still an operator.
+describe("incremental parsing after a regex literal", () => {
+  for (let line of ["my $a = /abc/ / 2 / 3;\n", "my $a = rx{ a+ } / 2 / 3;\n", "my $a = S/a/b/ / 2 / 3;\n"]) {
+    it(`matches a full parse of ${JSON.stringify(line)}`, () => {
+      let parser = rakuLanguage.parser, base = line.repeat(400), at = line.length * 200
+      let doc = base.slice(0, at) + "\n" + base.slice(at)
+      let fragments = TreeFragment.applyChanges(TreeFragment.addTree(parser.parse(base)),
+                                                [{fromA: at, toA: at, fromB: at, toB: at + 1}])
       assert.strictEqual(tokens(parser.parse(doc, fragments)), tokens(parser.parse(doc)))
     })
   }
@@ -808,6 +841,13 @@ sub other($elsewhere) { my $inner; state $kept }
     assert.strictEqual(complete("'a |'", true), null)
     assert.strictEqual(complete("token t {|}", true), null)
     assert.strictEqual(complete("token t { |a }", true), null)
+  })
+
+  it("completes in the code of a regex literal, and after the literal", () => {
+    assert.ok(complete("my $count; / a { $cou| } /").includes("$count"))
+    assert.ok(complete("/ a { sa| } /").includes("say"))
+    assert.ok(complete("/ a /; sa|").includes("say"))
+    assert.strictEqual(complete("/ a { 1 } sa| /"), null)
   })
 
   it("completes in the code of an interpolation", () => {

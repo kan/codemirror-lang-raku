@@ -13,7 +13,8 @@ export declare const
   methodDot: number, declaredName: number, declaredMethodName: number, smiley: number, noSmiley: number,
   plainName: number, multiName: number, multiRoutineName: number, wordOperator: number,
   rawString: number, quoteStart: number, quoteContent: number, quoteNestOpen: number,
-  quoteNestClose: number, quoteEnd: number, regexBody: number,
-  regexStart: number, regexBodyEnd: number, regexText: number, CharacterClass: number, Assertion: number,
+  quoteNestClose: number, quoteEnd: number, regexBody: number, regexLiteral: number, transliteration: number,
+  regexStart: number, regexBodyEnd: number, regexLitOpen: number, regexLitClose: number,
+  regexText: number, CharacterClass: number, Assertion: number,
   regexQuote: number, regexOperator: number, regexComment: number, regexBlockComment: number,
   regexCapture: number

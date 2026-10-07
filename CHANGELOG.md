@@ -2,8 +2,9 @@
 
 ### New features
 
-- The body of a `token`, `rule` or `regex` declaration is highlighted. Its
-  `Regex` node has children for character classes (`CharacterClass`),
+- Regexes are highlighted inside: the literals `/…/`, `rx/…/`, `m/…/` and
+  the pattern of `s/…/…/`, and the body of a `token`, `rule` or `regex`
+  declaration. A `Regex` node has children for character classes (`CharacterClass`),
   `<…>` assertions (`Assertion`), quoted literals, escapes, quantifiers
   and anchors, variables, comments, and the blocks of code in it, which
   are read as code.
@@ -39,6 +40,8 @@
 
 ### Bug fixes
 
+- A regex with bracket delimiters no longer ends at the `]` of a
+  character class in it: `rx[ <[a..z]> ]`.
 - `multi foo`, `proto foo` and `only foo` declare a sub also when the
   signature or the body starts on the next line.
 - A long comment right after a type name (`my Foo  # …`) no longer makes

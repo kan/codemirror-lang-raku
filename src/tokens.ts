@@ -4,13 +4,14 @@ import {
   BlockComment, DocComment, LineComment, Pod, Heredoc,
   podStart, podEnd, podEndDirective, podText, PodDirective, PodHeading, PodStrong, PodEmphasis, PodCode, PodLink,
   PodFormat,
-  MethodName, Version, Regex, Operator, Number as NumberTerm, radixNumber, PairKey,
+  MethodName, Version, regexLiteral, Regex, transliteration, Operator, Number as NumberTerm, radixNumber, PairKey,
   VariableName, AttributeName, SpecialVariable, operatorVariable,
   Identifier, TypeName, StringLiteral, Interpolation, self, True, False, Nil, multi, proto, only,
   PackageName, RoutineName, methodRoutineName, RegexName, EnumName, SubsetName, ConstantName,
   methodDot, declaredName, declaredMethodName, smiley, noSmiley, plainName, multiName, multiRoutineName, wordOperator,
   rawString, quoteStart, quoteContent, quoteNestOpen, quoteNestClose, quoteEnd,
-  regexBody, regexStart, regexBodyEnd, regexText, CharacterClass, Assertion, regexQuote, regexOperator, regexComment,
+  regexBody, regexStart, regexBodyEnd, regexLitOpen, regexLitClose,
+  regexText, CharacterClass, Assertion, regexQuote, regexOperator, regexComment,
   regexBlockComment, regexCapture
 } from "./syntax.grammar.terms"
 
@@ -206,16 +207,24 @@ const enum PodKind {
   Finish,
 }
 
-// The body of a regex declaration that is being read piece by piece.
+// The body of a regex declaration, or the inside of a regex literal,
+// that is being read piece by piece.
 class RegexBody {
   hash: number
   constructor(// The body around the block of code that this one is in.
               readonly parent: RegexBody | null,
               // How many braces are open in a block of code in the
               // regex. Zero in the regex itself.
-              readonly braces: number) {
-    this.hash = ((parent ? parent.hash * 31 : 0) + 7919 * (braces + 1)) | 0
+              readonly braces: number,
+              // For a regex literal, the position in the document of
+              // the delimiter that closes it. It is not part of the
+              // hash, which is to be the same before and after an edit
+              // that moves the literal.
+              readonly literalEnd = -1) {
+    this.hash = ((parent ? parent.hash * 31 : 0) + 7919 * (braces + 1) + (literalEnd < 0 ? 0 : 104729)) | 0
   }
+
+  withBraces(braces: number) { return new RegexBody(this.parent, braces, this.literalEnd) }
 }
 
 // A Pod block that is being read piece by piece.
@@ -277,7 +286,10 @@ class Context {
 // agree.
 const termModes = new Map<number, Mode>()
 for (let term of [VariableName, AttributeName, SpecialVariable, operatorVariable, NumberTerm, radixNumber, Version, MethodName,
-                  PairKey, rawString, quoteEnd, StringLiteral, Regex, regexBody, self, True, False, Nil,
+                  PairKey, rawString, quoteEnd, StringLiteral, regexLiteral, transliteration, regexBody,
+                  // The tree of the inside of a regex literal, which takes the
+                  // place of the literal's token in a node that is reused.
+                  Regex, self, True, False, Nil,
                   // The pieces of a regex. What follows them is more of
                   // the regex, or the brace that closes it.
                   regexText, CharacterClass, Assertion, regexQuote, regexOperator, regexComment,
@@ -423,12 +435,22 @@ export const trackContext = new ContextTracker<Context>({
     let {regex} = context
     if (term == regexStart) return context.withRegex(new RegexBody(regex, 0))
     if (term == regexBodyEnd) return context.withRegex(regex && regex.parent).withMode(termModes.get(regexBody)!)
+    // The inside of a regex literal is read by a parser of its own, of
+    // which these are the first and the last token. The closing
+    // delimiter is found the way termToken found it when it made the
+    // literal one token, so that the two agree on where the regex ends.
+    if (term == regexLitOpen) {
+      let opening = regexOpening(input), end = opening ? regexEnd(input, opening) : -1
+      // Without one, which takes a parse that does not start from a
+      // literal, the regex runs to the end of what is parsed.
+      return context.withRegex(new RegexBody(null, 0, end < 0 ? Infinity : input.pos + end))
+    }
+    if (term == regexLitClose) return context.withRegex(null)
     // The braces of a block of code in a regex, and of the blocks in it.
     // The tokens `{` and `}` have no term to go by.
     if (regex && !termModes.has(term)) {
-      if (input.next == Ch.BraceOpen) context = context.withRegex(new RegexBody(regex.parent, regex.braces + 1))
-      else if (input.next == Ch.BraceClose && regex.braces > 0)
-        context = context.withRegex(new RegexBody(regex.parent, regex.braces - 1))
+      if (input.next == Ch.BraceOpen) context = context.withRegex(regex.withBraces(regex.braces + 1))
+      else if (input.next == Ch.BraceClose && regex.braces > 0) context = context.withRegex(regex.withBraces(regex.braces - 1))
     }
     switch (term) {
       case quoteStart: {
@@ -491,16 +513,23 @@ function inTermPosition(input: InputStream, mode: Mode, size: number) {
 // #`(( ... )), needs the same number of closing ones. Brackets of the
 // same kind nest. An unclosed comment runs to the end of the input.
 export const blockComment = new ExternalTokenizer(input => {
-  if (input.next != Ch.Hash || input.peek(1) != Ch.Backtick) return
-  let open = input.peek(2), close = brackets[open]
-  if (close == null) return
-  let count = 1
-  while (input.peek(2 + count) == open) count++
-  let end = rawEnd(input, 2 + count, {open, close, count, escapes: false})
+  let end = embeddedCommentEnd(input, 0)
+  if (!end) return
   if (end < 0) skipToEnd(input)
   else input.advance(end)
   input.acceptToken(BlockComment)
 })
+
+// The offset after the embedded comment that starts at offset `at`.
+// Zero when none starts there, and -1 when it is not closed.
+function embeddedCommentEnd(input: InputStream, at: number) {
+  if (input.peek(at) != Ch.Hash || input.peek(at + 1) != Ch.Backtick) return 0
+  let open = input.peek(at + 2), close = brackets[open]
+  if (close == null) return 0
+  let count = 1
+  while (input.peek(at + 2 + count) == open) count++
+  return rawEnd(input, at + 2 + count, {open, close, count, escapes: false})
+}
 
 function isBlank(ch: number) { return ch == Ch.Space || ch == Ch.Tab || ch == Ch.Return }
 
@@ -699,7 +728,7 @@ interface Opening {
   open: number, close: number, count: number
   // The offset of the first character after the opening delimiter.
   start: number
-  kind: "raw" | "interpolating" | "regex" | "substitution"
+  kind: "raw" | "interpolating" | "regex" | "substitution" | "transliteration"
   // What it interpolates, as Interpolate bits. Zero for the "raw" kind.
   interpolates: number
   // Whether a backslash escapes the next character.
@@ -712,7 +741,9 @@ const quoteWords: {[name: string]: Opening["kind"]} = {
   q: "raw", Q: "raw", qw: "raw", qww: "raw", qx: "raw", Qw: "raw", Qww: "raw", Qx: "raw",
   qq: "interpolating", qqw: "interpolating", qqww: "interpolating", qqx: "interpolating",
   rx: "regex", m: "regex", ms: "regex",
-  s: "substitution", ss: "substitution", S: "substitution", tr: "substitution", TR: "substitution"
+  s: "substitution", ss: "substitution", S: "substitution",
+  // Like a substitution, but its first part is not a regex.
+  tr: "transliteration", TR: "transliteration"
 }
 
 // The kinds of interpolation that the adverbs of a quote switch.
@@ -849,7 +880,8 @@ function quotedEnd(input: InputStream, pos: number) {
 // The offset of the delimiter that closes a regex whose content starts
 // at `pos`, or -1. Delimiters do not count inside quotes, character
 // classes, comments and code blocks.
-function regexEnd(input: InputStream, pos: number, open: number, close: number, count: number) {
+function regexEnd(input: InputStream,
+                  {start: pos, open, close, count}: Pick<Opening, "start" | "open" | "close" | "count">): number {
   for (let depth = 1;;) {
     let ch = input.peek(pos)
     if (ch < 0) return -1
@@ -883,10 +915,15 @@ function regexEnd(input: InputStream, pos: number, open: number, close: number, 
         if (input.peek(more) != Ch.BracketOpen) break
         pos = more
       }
+      // The bracket that closes the class is not one of the regex: rx[ <[a]> ]
+      pos++
     } else if (ch == Ch.Hash) {
-      while (input.peek(pos) >= 0 && input.peek(pos) != Ch.Newline) pos++
+      // An embedded comment, or one that runs to the end of the line.
+      let end = embeddedCommentEnd(input, pos)
+      if (end > 0) pos = end
+      else while (input.peek(pos) >= 0 && input.peek(pos) != Ch.Newline) pos++
     } else if (ch == Ch.BraceOpen && close != Ch.BraceClose) {
-      let end = regexEnd(input, pos + 1, Ch.BraceOpen, Ch.BraceClose, 1)
+      let end = regexEnd(input, {start: pos + 1, open: Ch.BraceOpen, close: Ch.BraceClose, count: 1})
       pos = end < 0 ? pos + 1 : end + 1
     } else {
       pos++
@@ -896,13 +933,25 @@ function regexEnd(input: InputStream, pos: number, open: number, close: number, 
 
 // The offset after a regex or substitution, given its opening, or -1.
 function regexTokenEnd(input: InputStream, opening: Opening) {
-  let {open, close, count} = opening
-  let end = regexEnd(input, opening.start, open, close, count)
+  let end = regexEnd(input, opening)
   if (end < 0) return -1
-  end += count
+  end += opening.count
   // s/a/b/ has a second part. s{a} = 'b' does not.
-  if (opening.kind == "substitution" && open == close) end = rawEnd(input, end, opening)
+  if (opening.kind != "regex" && opening.open == opening.close) end = rawEnd(input, end, opening)
   return end
+}
+
+// The opening of a bare regex: /a/
+const slashOpening: Opening = {open: Ch.Slash, close: Ch.Slash, count: 1, start: 1, kind: "regex",
+                               interpolates: 0, escapes: true}
+
+// The opening of the regex literal at the current position. The token
+// that makes a literal one token, and the parse of its inside, both
+// find its closing delimiter from this, so that they agree.
+function regexOpening(input: InputStream) {
+  if (input.next == Ch.Slash) return slashOpening
+  let opening = readOpening(input)
+  return opening && (opening.kind == "regex" || opening.kind == "substitution") ? opening : null
 }
 
 // The offset after a word list that opens at the current position, or
@@ -969,7 +1018,7 @@ function isWordOperator(name: string) {
 
 // The tokens that depend on whether a term or an operator is expected.
 export const termToken = new ExternalTokenizer((input, stack) => {
-  if (!stack.canShift(Regex)) return
+  if (!stack.canShift(regexLiteral)) return
   let next = input.next, {mode} = context(stack)
 
   if (isIdentifierStart(next)) {
@@ -1046,8 +1095,8 @@ export const termToken = new ExternalTokenizer((input, stack) => {
     return
   } else if (next == Ch.Slash) {
     if (input.peek(1) == Ch.Slash || !inTermPosition(input, mode, 1)) return
-    let end = regexEnd(input, 1, Ch.Slash, Ch.Slash, 1)
-    if (end > 0) input.acceptToken(Regex, end + 1)
+    let end = regexTokenEnd(input, slashOpening)
+    if (end > 0) input.acceptToken(regexLiteral, end)
     return
   }
 
@@ -1056,7 +1105,7 @@ export const termToken = new ExternalTokenizer((input, stack) => {
   if (opening.kind == "interpolating") return input.acceptToken(quoteStart, opening.start)
   if (opening.kind != "raw") {
     let end = regexTokenEnd(input, opening)
-    if (end > 0) input.acceptToken(Regex, end)
+    if (end > 0) input.acceptToken(opening.kind == "transliteration" ? transliteration : regexLiteral, end)
     return
   }
   let end = rawEnd(input, opening.start, opening)
@@ -1218,35 +1267,51 @@ function assertionEnd(input: InputStream) {
 export const regexToken = new ExternalTokenizer((input, stack) => {
   let {regex} = context(stack), next = input.next
   if (!regex || regex.braces > 0) {
+    // At the start of the parse of the inside of a regex literal, the
+    // opening delimiter: `/`, or a quote word with its adverbs: rx:i/
+    if (!regex && stack.canShift(regexLitOpen)) {
+      let opening = regexOpening(input)
+      if (opening) input.acceptToken(regexLitOpen, opening.start)
+      return
+    }
     // Outside of a regex, or in a block of code in one, where another
     // regex can be declared. An empty body, `{}`, has no regex.
     if (next >= 0 && next != Ch.BraceClose && stack.canShift(regexStart)) input.acceptToken(regexStart)
     return
   }
-  // The body ends at its closing brace. One that is not closed ends
-  // before the next regex declaration, which a body does not hold, so
-  // that the declarations after it are still found.
-  if (next < 0 || next == Ch.BraceClose || next == Ch.Newline && startsRegexDeclaration(input, 1))
+  let {literalEnd} = regex
+  if (literalEnd >= 0) {
+    // A literal ends at its closing delimiter. The rest of what is
+    // parsed, which for s/a/b/ includes the replacement, is one token.
+    if (next < 0 || input.pos >= literalEnd) {
+      skipToEnd(input)
+      return input.acceptToken(regexLitClose)
+    }
+  } else if (next < 0 || next == Ch.BraceClose || next == Ch.Newline && startsRegexDeclaration(input, 1)) {
+    // The body ends at its closing brace. One that is not closed ends
+    // before the next regex declaration, which a body does not hold, so
+    // that the declarations after it are still found.
     return input.acceptToken(regexBodyEnd)
+  }
   // A block of code, and an escape, are tokens of the grammar. An
   // escape does not take a line break, where the check above is made.
   if (next == Ch.BraceOpen) return
   if (next == Ch.Backslash && input.peek(1) >= 0 && input.peek(1) != Ch.Newline) return
+  // How far a piece of a literal can go: up to its closing delimiter.
+  // The pieces are read by other rules than the ones that found that
+  // delimiter, and where the two disagree, the delimiter wins. A piece
+  // that would go over it is text.
+  let limit = literalEnd < 0 ? Infinity : literalEnd - input.pos
   if (next == Ch.Hash) {
     // An embedded comment, #`( ... ), or one that runs to the end of the line.
-    let open = input.peek(2), close = input.peek(1) == Ch.Backtick ? brackets[open] : null
-    if (close != null) {
-      let count = 1
-      while (input.peek(2 + count) == open) count++
-      let end = rawEnd(input, 2 + count, {open, close, count, escapes: false})
-      if (end > 0) return input.acceptToken(regexBlockComment, end)
-    }
+    let end = embeddedCommentEnd(input, 0)
+    if (end > 0) return input.acceptToken(regexBlockComment, end)
     skipLine(input)
     return input.acceptToken(regexComment)
   }
   if (next == Ch.Apostrophe || next == Ch.DoubleQuote) {
     let end = quotedEnd(input, 0)
-    if (end > 0) return input.acceptToken(regexQuote, end)
+    if (end > 0 && end <= limit) return input.acceptToken(regexQuote, end)
   } else if (next == Ch.Less || next == Ch.Greater || next == Ch.GuillemetOpen || next == Ch.GuillemetClose ||
              next == Ch.ParenClose && input.peek(1) == Ch.Greater) {
     // Word boundaries and capture markers stand alone: << >> « » <( )>
@@ -1256,6 +1321,7 @@ export const regexToken = new ExternalTokenizer((input, stack) => {
       if (next != Ch.Greater || after == Ch.Greater) return input.acceptToken(regexOperator, size)
     } else {
       let end = assertionEnd(input)
+      if (end > limit) return input.acceptToken(regexText, 1)
       if (end > 0) {
         // <[a..z]>, <-[a]>, <+alpha-[b]>, <?[c]>
         let kind = after == Ch.Question || after == Ch.Bang ? input.peek(2) : after
@@ -1276,23 +1342,27 @@ export const regexToken = new ExternalTokenizer((input, stack) => {
       if (end > 0 && input.peek(end) == Ch.Greater) return input.acceptToken(regexCapture, end + 1)
     }
     // A variable is a token of the grammar: $x, $0, $/, @list, $!attr, $*dynamic
-    if (isIdentifierStart(after) || next == Ch.Dollar && (isDigit(after) || after == Ch.Slash)) return
-    if ((after == Ch.Bang || after == Ch.Dot || after == Ch.Star || after == Ch.Question) &&
-        isIdentifierStart(input.peek(2))) return
+    // Not the `$` before the delimiter that closes a literal: /a$/
+    if (limit != 1) {
+      if (isIdentifierStart(after) || next == Ch.Dollar && (isDigit(after) || after == Ch.Slash)) return
+      if ((after == Ch.Bang || after == Ch.Dot || after == Ch.Star || after == Ch.Question) &&
+          isIdentifierStart(input.peek(2))) return
+    }
     // Otherwise `$` and `$$` anchor.
     if (next == Ch.Dollar) {
-      while (input.next == Ch.Dollar) input.advance()
+      while (input.next == Ch.Dollar && input.pos != literalEnd) input.advance()
       return input.acceptToken(regexOperator)
     }
   } else if (isRegexOperator(next)) {
-    while (isRegexOperator(input.next)) input.advance()
+    while (isRegexOperator(input.next) && input.pos != literalEnd) input.advance()
     return input.acceptToken(regexOperator)
   }
   // Text, up to where one of the above may apply.
   for (;;) {
     input.advance()
     let ch = input.next
-    if (ch < 0 || ch == Ch.Newline || ch == Ch.Backslash || ch == Ch.Apostrophe || ch == Ch.DoubleQuote ||
+    if (ch < 0 || input.pos == literalEnd ||
+        ch == Ch.Newline || ch == Ch.Backslash || ch == Ch.Apostrophe || ch == Ch.DoubleQuote ||
         ch == Ch.Less || ch == Ch.Greater || ch == Ch.GuillemetOpen || ch == Ch.GuillemetClose ||
         ch == Ch.ParenClose && input.peek(1) == Ch.Greater ||
         ch == Ch.BraceOpen || ch == Ch.BraceClose || ch == Ch.Hash || ch == Ch.Dollar ||

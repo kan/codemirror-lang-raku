@@ -7,7 +7,7 @@ when /bar/ { }
 ==>
 
 Program(if, VariableName, Operator, Regex, Block,
-  my, VariableName, Operator, Regex,
+  my, VariableName, Operator, Regex(Escape, Operator),
   when, Regex, Block)
 
 # Division is not a regex
@@ -65,7 +65,8 @@ Program(if, VariableName, Block(Number), Regex, MethodCall(MethodName),
 
 ==>
 
-Program(Regex, Regex, Regex, Regex, Regex, Number)
+Program(Regex(Escape), Regex(CharacterClass), Regex(StringLiteral), Regex(StringLiteral),
+  Regex(Block(Number, Operator, Number)), Number)
 
 # Combined character classes
 
@@ -73,7 +74,7 @@ token t { <+[a..z]-[}]> x }; / <+[a..z] - [/]> /; 1
 
 ==>
 
-Program(RegexDeclaration(token, RegexName, Block(Regex(CharacterClass))), Regex, Number)
+Program(RegexDeclaration(token, RegexName, Block(Regex(CharacterClass))), Regex(CharacterClass), Number)
 
 # rx and m
 
@@ -82,6 +83,39 @@ rx/foo/; m/bar/; rx{ a b }; m[c]; m:g:i/d/; rx:P5/e/; m!f!
 ==>
 
 Program(Regex, Regex, Regex, Regex, Regex, Regex, Regex)
+
+# The pieces of a regex literal
+
+if $s ~~ m:i/ ^ (\d+) $<n>=[\w+] <ident> { say $0 } <[a..z]> 'x' $x # c
+  / { }
+rx{ a { 1 } b+ }; m!f+!; rx[ a [b] <[c]>+ ]; 1
+
+==>
+
+Program(if, VariableName, Operator,
+  Regex(Operator, Escape, Operator, VariableName, Escape, Operator, Assertion,
+    Block(Identifier, VariableName), CharacterClass, StringLiteral, VariableName, LineComment),
+  Block,
+  Regex(Block(Number), Operator), Regex(Operator), Regex(CharacterClass, Operator), Number)
+
+# The delimiter that closes a regex literal ends its pieces
+
+if $s ~~ /^foo$/ { }
+m|a+|; s|a+|b|; m!a$!; s/<a/b>/; / a #`( / ) b+ /; / a { /b+/ } /; 1
+
+==>
+
+Program(if, VariableName, Operator, Regex(Operator, Operator), Block,
+  Regex(Operator), Regex(Operator), Regex(Operator), Regex, Regex(BlockComment, Operator),
+  Regex(Block(Regex(Operator))), Number)
+
+# The replacement of a substitution is not read as a regex
+
+s/a+/b+c/; s:g{a+} = "b+"; tr/a+/b+/; S[a+] = 1; 1
+
+==>
+
+Program(Regex(Operator), Regex(Operator), Operator, StringLiteral, Regex, Regex(Operator), Operator, Number, Number)
 
 # Substitution and transliteration
 
@@ -114,7 +148,7 @@ my $r = rx/
 
 ==>
 
-Program(my, VariableName, Operator, Regex, Number)
+Program(my, VariableName, Operator, Regex(Escape, Operator, LineComment, StringLiteral), Number)
 
 # Regex declaration bodies
 

@@ -38,7 +38,8 @@ nonBlock {
   Number |
   Version |
   StringLiteral |
-  Regex |
+  regexLiteral |
+  transliteration |
   PairKey |
   keyword |
   Operator |
@@ -108,11 +109,21 @@ TypeName { capIdentifier (smiley | noSmiley) }
   // The body of a regex declaration. Its text is the part that no child
   // node covers.
   regexBody[@name=Regex] {
-    regexStart
-    (regexText | Escape | CharacterClass | Assertion | regexQuote | regexOperator | regexComment |
-     regexBlockComment | regexCapture |
-     VariableName | AttributeName | SpecialVariable | RegexCode)*
-    regexBodyEnd
+    regexStart regexPiece* regexBodyEnd
+  }
+
+  // The inside of a regex literal. The parser of Program reads a
+  // literal as one token, regexLiteral, and this rule is parsed over
+  // the text of that token (see index.ts). Its first token is the
+  // opening delimiter, and its last the closing one with what follows.
+  @top RegexLiteral[@name=Regex] {
+    regexLitOpen regexPiece* regexLitClose
+  }
+
+  regexPiece {
+    regexText | Escape | CharacterClass | Assertion | regexQuote | regexOperator | regexComment |
+    regexBlockComment | regexCapture |
+    VariableName | AttributeName | SpecialVariable | RegexCode
   }
 
   // A Pod block. Its text is the part that no child node covers.
@@ -196,14 +207,14 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 @external tokens versionToken from "./tokens" { Version }
 @external tokens regexToken from "./tokens" {
   // The first and the last of these are empty.
-  regexStart, regexBodyEnd, regexText, CharacterClass, Assertion,
+  regexStart, regexBodyEnd, regexLitOpen, regexLitClose, regexText, CharacterClass, Assertion,
   regexQuote[@name=StringLiteral], regexOperator[@name=Operator], regexComment[@name=LineComment],
   regexBlockComment[@name=BlockComment], regexCapture[@name=VariableName]
 }
 @external tokens quoteToken from "./tokens" { quoteContent, quoteNestOpen, quoteNestClose, quoteEnd }
 // Tokens that depend on whether a term or an operator is expected.
 @external tokens termToken from "./tokens" {
-  rawString, quoteStart, Regex, plainName, wordOperator[@name=Operator],
+  rawString, quoteStart, regexLiteral[@name=Regex], transliteration[@name=Regex], plainName, wordOperator[@name=Operator],
   // The name after `multi`, `proto` or `only`, when no declarator follows.
   multiName,
   // &infix:<+>
