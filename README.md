@@ -130,8 +130,9 @@ Not supported yet:
 - A Pod block is read where a statement or a term can stand, not
   everywhere that whitespace can: one between `class` and the name of
   the class is not read as Pod.
-- A quote adverb that is switched off through its argument, as in
-  `qq:c(False)[…]`, counts as switched on.
+- A quote adverb is switched off by the argument `False` or `0`, as in
+  `qq:c(False)[…]`. With any other argument, such as a variable, it
+  counts as switched on.
 - The brackets of a block comment are picked for the `toggleBlockComment`
   command. Text that unbalances every bracket that is tried gets
   `` #`( `` … `)`, which then does not cover exactly that text.
@@ -166,13 +167,17 @@ Heuristics that can be wrong:
 - A `<…>` right after a term is a subscript only when it holds plain words
   on one line: `%h<key>`, but not `$a<$b`.
 - `q`, `qq`, `Q`, `m`, `rx`, `s`, `tr` and their variants start a quote
-  when a delimiter follows directly, so a sigilless `s/2` is misread, and
-  `q {…}` with a space is not a quote.
+  when a delimiter follows directly, so a sigilless `s/2` is misread.
+  `q`, `qq` and `Q` also take a bracket after blanks (`q {…}`), so a
+  routine or a sigilless variable of your own named `q`, before a block
+  or a subscript, is misread. The
+  regex words do not: `m {…}` and `s {…}` are calls.
 - `%name` and `&name` are variables, except between two terms with no
   space on either side: `$a%b`.
 - After `multi`, `proto` or `only`, a name is taken to declare a sub when
-  a `(` or a `{` follows it: `multi foo($x) { }`. A signature that starts
-  on the next line is not seen, and a call such as `only foo(1)`, of a
+  a `(` or a `{` follows it, on the same line or the next:
+  `multi foo($x) { }`. One that follows a comment or more than 20
+  characters of whitespace is not seen, and a call such as `only foo(1)`, of a
   routine of your own that is named `only`, is read as a declaration.
 - A word spelled like a keyword is a keyword wherever it appears, except
   as a method name, as a declared name, before `=>`, and for the

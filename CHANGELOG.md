@@ -32,8 +32,17 @@
   `VariableName`. Operator names can also be written as `circumfix:<[ ]>`
   and `infix:['+']`.
 
+- `q`, `qq`, `Q` and their variants take a bracket after blanks: `q {…}`,
+  `qw <a b>`.
+- An adverb with an argument that is `False` or `0` is switched off:
+  `qq:c(False)[…]`.
+
 ### Bug fixes
 
+- `multi foo`, `proto foo` and `only foo` declare a sub also when the
+  signature or the body starts on the next line.
+- A long comment right after a type name (`my Foo  # …`) no longer makes
+  every edit before it reparse the document up to that comment.
 - After the built-in terms `pi`, `π`, `tau`, `τ`, `now`, `time` and `rand`, a
   `/` or `<` is an operator whatever the spacing: `pi /2`.
 - A keyword that is a routine and is called with parentheses, as in

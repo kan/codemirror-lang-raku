@@ -107,6 +107,33 @@ Program(multi, RoutineDeclaration(RoutineName, Parens(VariableName), Block),
   multi, BlockComment, RoutineDeclaration(RoutineName, Parens, Block), LineComment,
   proto, LineComment, RoutineDeclaration(RoutineName, Parens(Operator), Block(Operator)))
 
+# A signature or a body that starts on the line after the name
+
+multi foo
+  (Int $x) { }
+proto bar
+{*}
+multi baz
+
+
+
+    () { }
+only quux, 1;
+multi corge
+# not a declaration: a comment is in between
+  () { }
+multi su
+(1 + 2).say;
+
+==>
+
+Program(multi, RoutineDeclaration(RoutineName, Parens(TypeName, VariableName), Block),
+  proto, RoutineDeclaration(RoutineName, Block(Operator)),
+  multi, RoutineDeclaration(RoutineName, Parens, Block),
+  only, Identifier, Number,
+  multi, Identifier, LineComment, Parens, Block,
+  multi, Identifier, Parens(Number, Operator, Number), MethodCall(MethodName))
+
 # Multi with a declarator
 
 multi sub foo(Int $x) { } proto method bar(|) { }

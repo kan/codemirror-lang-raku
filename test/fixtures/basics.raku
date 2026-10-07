@@ -41,6 +41,8 @@ A Pod block in the middle of a statement.
 enum Status;
 subset Positive of Int where * > 0;
 constant MAX-ITEMS = 1_000;
+my Positive  # a comment after a type name, longer than a token may look ahead
+    $limit = MAX-ITEMS;
 
 sub is-low(Item $item, Int :$threshold = 5 --> Bool) is export {
     $item.count < $threshold

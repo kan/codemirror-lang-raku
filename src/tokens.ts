@@ -8,7 +8,7 @@ import {
   VariableName, AttributeName, SpecialVariable, operatorVariable,
   Identifier, TypeName, StringLiteral, Interpolation, self, True, False, Nil, multi, proto, only,
   PackageName, RoutineName, methodRoutineName, RegexName, EnumName, SubsetName, ConstantName,
-  methodDot, declaredName, declaredMethodName, smiley, plainName, multiName, multiRoutineName, wordOperator,
+  methodDot, declaredName, declaredMethodName, smiley, noSmiley, plainName, multiName, multiRoutineName, wordOperator,
   rawString, quoteStart, quoteContent, quoteNestOpen, quoteNestClose, quoteEnd,
   regexBody, regexStart, regexBodyEnd, regexText, CharacterClass, Assertion, regexQuote, regexOperator, regexComment,
   regexBlockComment, regexCapture
@@ -283,7 +283,7 @@ for (let term of [VariableName, AttributeName, SpecialVariable, operatorVariable
                   regexText, CharacterClass, Assertion, regexQuote, regexOperator, regexComment,
                   regexBlockComment, regexCapture])
   termModes.set(term, Mode.AfterTerm)
-for (let term of [Identifier, TypeName, smiley, declaredName, declaredMethodName, PackageName, RoutineName,
+for (let term of [Identifier, TypeName, smiley, noSmiley, declaredName, declaredMethodName, PackageName, RoutineName,
                   methodRoutineName, multiName, multiRoutineName, RegexName, EnumName, SubsetName, ConstantName])
   termModes.set(term, Mode.AfterName)
 // The `}` of "{...}" in a string does not take a subscript.
@@ -507,6 +507,19 @@ function isBlank(ch: number) { return ch == Ch.Space || ch == Ch.Tab || ch == Ch
 // The offset of the first character at or after `pos` that is not a blank.
 function blanksEnd(input: InputStream, pos: number) {
   while (isBlank(input.peek(pos))) pos++
+  return pos
+}
+
+// How far a token looks over the whitespace after it, to see what
+// follows. A token must not look far past its end: see the note on
+// lookahead in AGENTS.md.
+const maxGap = 20
+
+// The offset of the first character at or after `pos` that is not a
+// blank, or not whitespace when `lines` is set, going over at most
+// maxGap characters.
+function gapEnd(input: InputStream, pos: number, lines = false) {
+  for (let end = pos + maxGap; pos < end && (lines ? isSpace : isBlank)(input.peek(pos));) pos++
   return pos
 }
 
@@ -763,25 +776,32 @@ function readOpening(input: InputStream, at = 0): Opening | null {
     pos += 2
     while (isAsciiLetter(input.peek(pos)) || isDigit(input.peek(pos))) pos++
     let adverb = word(input, adverbStart, pos)
+    // An argument that is False or 0 switches the adverb off: q:c(False)
+    if (input.peek(pos) == Ch.ParenOpen) {
+      let argStart = pos + 1
+      while (input.peek(pos) != Ch.ParenClose) {
+        if (input.peek(pos) < 0 || input.peek(pos) == Ch.Newline) return null
+        pos++
+      }
+      if (/^\s*(False|0)\s*$/.test(word(input, argStart, pos))) negated = true
+      pos++
+    }
     if (isQuote) {
       let bits = interpolationAdverbs.get(adverb)
       if (bits != null) interpolates = negated ? interpolates & ~bits : interpolates | bits
       else if (!negated && (adverb == "q" || adverb == "single")) escapes = true
       else if (!negated && (adverb == "to" || adverb == "heredoc")) heredoc = true
     }
-    if (input.peek(pos) == Ch.ParenOpen) {
-      while (input.peek(pos) != Ch.ParenClose) {
-        if (input.peek(pos) < 0 || input.peek(pos) == Ch.Newline) return null
-        pos++
-      }
-      pos++
-    }
   }
   if (!adverbs && continuesName(input, pos)) return null
 
-  // The delimiter has to follow directly. Raku also takes `q {...}`, but
-  // then `S { ... }` and `m ($x)` on a name that is not a quote word
-  // would turn into quotes.
+  // The delimiter follows directly, or, for q, qq and Q, after blanks
+  // on the same line: q {...}. Not for m, s and the others: `s { ... }`
+  // and `m ($x)` are more often calls of a routine of one's own.
+  if (isQuote && isBlank(input.peek(pos))) {
+    let bracket = gapEnd(input, pos)
+    if (brackets[input.peek(bracket)] != null && input.peek(bracket) != Ch.ParenOpen) pos = bracket
+  }
   let open = input.peek(pos), close = brackets[open]
   if (close == null) {
     if (!isQuoteDelimiter(open)) return null
@@ -936,6 +956,11 @@ const callableKeywords = /^(take|return|emit|next|last|redo|proceed|succeed|so|n
 // The words that declare what follows `multi`, `proto` or `only`.
 const declarators = /^(sub|method|submethod|token|rule|regex)$/
 
+// Whether a declarator starts with the given word, as `su` starts `sub`.
+function startsDeclarator(name: string) {
+  return ["sub", "method", "submethod", "token", "rule", "regex"].some(declarator => declarator.startsWith(name))
+}
+
 const operatorCategory = /^(infix|prefix|postfix|circumfix|postcircumfix|term)$/
 
 function isWordOperator(name: string) {
@@ -956,8 +981,7 @@ export const termToken = new ExternalTokenizer((input, stack) => {
       return input.acceptToken(wordOperator, pos)
     }
     // A word before `=>` is a key, whatever it spells.
-    let end = nameEnd(input, 0), after = end
-    while (input.peek(after) == Ch.Space || input.peek(after) == Ch.Tab) after++
+    let end = nameEnd(input, 0), after = gapEnd(input, end)
     if (input.peek(after) == Ch.Equals && input.peek(after + 1) == Ch.Greater)
       return input.acceptToken(plainName, end)
     // After `multi`, `proto` or `only`, a name that is not a declarator
@@ -965,9 +989,13 @@ export const termToken = new ExternalTokenizer((input, stack) => {
     // Only with a signature or a body right after it. A name alone may
     // be a declarator that is still being typed (`multi su`), and
     // `only` and `proto` can be routines of one's own (`only foo, 1`).
+    // The signature may start on the next line, unless the name can
+    // still become a declarator: `multi su` above a line with a `(`.
     if (mode == Mode.AfterMulti && !(end <= 9 && declarators.test(word(input, 0, end)))) {
-      let nameTo = categoryEnd(input, 0, end), after = input.peek(blanksEnd(input, nameTo))
-      if (after == Ch.ParenOpen || after == Ch.BraceOpen) return input.acceptToken(multiName, nameTo)
+      let nameTo = categoryEnd(input, 0, end), opens = (ch: number) => ch == Ch.ParenOpen || ch == Ch.BraceOpen
+      if (opens(input.peek(gapEnd(input, nameTo))) ||
+          opens(input.peek(gapEnd(input, nameTo, true))) && !startsDeclarator(word(input, 0, end)))
+        return input.acceptToken(multiName, nameTo)
     }
     // So is one of the keywords that are routines, when it is called
     // with parentheses: take(1). They are 2 to 7 characters long.
@@ -1337,11 +1365,19 @@ export const nameToken = new ExternalTokenizer((input, stack) => {
 
 // The type smiley in Int:D, Str:U and Any:_. It has to touch the type
 // name, and must not be the start of a longer pair such as :Default.
+//
+// A type name without a smiley ends in an empty token. Without it, the
+// parser has to read the token after the name to know that the name is
+// complete, and when a long comment is in between, it records that as
+// a lookahead, which keeps the tokens before it from being reused.
 export const smileyToken = new ExternalTokenizer((input, stack) => {
-  if (input.next != Ch.Colon || !stack.canShift(smiley) || !continuesName(input, -1)) return
-  let kind = input.peek(1)
-  if ((kind == Ch.D || kind == Ch.U || kind == Ch.Underscore) && !continuesName(input, 2))
-    input.acceptToken(smiley, 2)
+  if (!stack.canShift(noSmiley)) return
+  if (input.next == Ch.Colon) {
+    let kind = input.peek(1)
+    if ((kind == Ch.D || kind == Ch.U || kind == Ch.Underscore) && !continuesName(input, 2))
+      return input.acceptToken(smiley, 2)
+  }
+  input.acceptToken(noSmiley, 0)
 })
 
 // v6, v6.d, v1.2.3, v1.2+, v1.*. A name such as v8-engine is not a version.

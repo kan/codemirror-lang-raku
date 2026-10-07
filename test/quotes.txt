@@ -108,6 +108,29 @@ q:c[a \] {1} b], q:c{a \} {1} b}, Q:c[a \], 1
 
 Program(StringLiteral(Interpolation(Number)), StringLiteral, StringLiteral, Number)
 
+# Adverbs with an argument that switches them off
+
+qq:c(False)[{1} $x], qq:s(0)[{1} $x], q:c(True)[{1} $x], q:to(False)/END/, q:!c(0)[{1}], 1
+
+==>
+
+Program(
+  StringLiteral(VariableName),
+  StringLiteral(Interpolation(Number)),
+  StringLiteral(Interpolation(Number)),
+  StringLiteral, StringLiteral, Number)
+
+# A quote word with a space before its brackets
+
+q {a}, qq {$x}, Q {a}, qw {a b}, q [a], q (a), m {a}, s {a}, q
+{a}
+
+==>
+
+Program(StringLiteral, StringLiteral(VariableName), StringLiteral, StringLiteral, StringLiteral,
+  Identifier, Parens(Identifier), Identifier, Block(Identifier), Identifier, Block(Identifier),
+  Identifier, Block(Identifier))
+
 # Adverbs of a regex are not about interpolation
 
 m:s/a b/, s:g/a/b/, rx:i/a/, 1

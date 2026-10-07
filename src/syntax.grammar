@@ -102,7 +102,7 @@ MethodCall { methodDot MethodName }
 Identifier { identifier | plainName }
 // A capitalized name is taken to be a type, and may carry a type
 // smiley: Int:D, Str:U, Any:_
-TypeName { capIdentifier smiley? }
+TypeName { capIdentifier (smiley | noSmiley) }
 
 @skip {} {
   // The body of a regex declaration. Its text is the part that no child
@@ -180,6 +180,9 @@ kw<term> { @specialize[@name={term}]<identifier, term> }
 capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 
 // External tokenizers are tried in this order, before the tokens below.
+// This one is first, so that a type name ends before the comment or the
+// heredoc that follows it.
+@external tokens smileyToken from "./tokens" { smiley, noSmiley }
 @external tokens blockComment from "./tokens" { BlockComment }
 @external tokens podToken from "./tokens" {
   podStart[@name=PodDirective], podEnd, podEndDirective[@name=PodDirective], podText,
@@ -189,8 +192,7 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 @external tokens methodDotToken from "./tokens" { methodDot[@name="."] }
 // Names in positions where a word is never a keyword: `method next`, `.default`.
 @external tokens nameToken from "./tokens" { MethodName, declaredName, declaredMethodName }
-// These two need to see that no identifier character follows.
-@external tokens smileyToken from "./tokens" { smiley }
+// This one needs to see that no identifier character follows.
 @external tokens versionToken from "./tokens" { Version }
 @external tokens regexToken from "./tokens" {
   // The first and the last of these are empty.
