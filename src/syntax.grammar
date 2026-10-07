@@ -96,7 +96,8 @@ multiRoutineName[@name=RoutineName] { multiName }
 RegexName { declaredName }
 EnumName { declaredName }
 SubsetName { declaredName }
-ConstantName { declaredName }
+// A constant can have a sigil: constant $LIMIT = 3
+ConstantName { declaredName | declaredVariable }
 
 MethodCall { methodDot MethodName }
 
@@ -227,7 +228,7 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 }
 @external tokens methodDotToken from "./tokens" { methodDot[@name="."] }
 // Names in positions where a word is never a keyword: `method next`, `.default`.
-@external tokens nameToken from "./tokens" { MethodName, declaredName, declaredMethodName }
+@external tokens nameToken from "./tokens" { MethodName, declaredName, declaredMethodName, declaredVariable }
 // This one needs to see that no identifier character follows.
 @external tokens versionToken from "./tokens" { Version }
 @external tokens regexToken from "./tokens" {
@@ -280,7 +281,7 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
   }
 
   sigilChar { $[$@%&] }
-  VariableName { sigilChar $[\^:]? qualifiedWord | "$" @digit+ | "$" $[/!] }
+  VariableName { sigilChar $[\^:]? qualifiedWord | "$" @digit+ | "$" $[/!\u{a2}] }
   AttributeName { sigilChar $[!.] qualifiedWord }
   SpecialVariable { sigilChar $[*?=~] qualifiedWord }
   sigil { $[$@] }
@@ -291,7 +292,9 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
     "0" $[xX] $[0-9a-fA-F_]+ |
     "0" $[oO] $[0-7_]+ |
     "0" $[bB] $[01_]+ |
-    "0" $[dD] $[0-9_]+
+    "0" $[dD] $[0-9_]+ |
+    // A fraction that is one character: ½, ⅔
+    $[\u{bc}-\u{be}\u{2150}-\u{215f}\u{2189}]
   }
 
   // :16<FF>
@@ -299,10 +302,19 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 
   Escape { "\\" _ }
 
-  // ASCII operator characters, « » × ÷ …, and the mathematical operators block.
-  operatorChar { $[+\-*/~^|<>=!?\\\u{ab}\u{bb}\u{d7}\u{f7}\u{2026}\u{2200}-\u{22ff}] }
+  // ASCII operator characters, and the symbols outside of ASCII: « » ×
+  // ÷ … ∘ ⚛ and the like. An operator of one's own is usually made of
+  // such symbols (infix:<⚡>), and is not known where it is used. The
+  // ranges leave out the quotes (‘ ’ “ ” ‚ „), the spaces, the
+  // superscripts and the fractions.
+  operatorChar {
+    $[+\-*/~^|<>=!?\\\u{a1}-\u{a9}\u{ab}\u{ac}\u{ae}-\u{b1}\u{b4}\u{b6}-\u{b8}\u{bb}\u{bf}\u{d7}\u{f7}]
+    | $[\u{2010}-\u{2017}\u{2020}-\u{2027}\u{2030}-\u{205e}\u{2190}-\u{2bff}]
+  }
   Operator {
     operatorChar+ |
+    // A power written in superscript: $x², 2⁻¹
+    $[\u{b2}\u{b3}\u{b9}\u{2070}\u{2074}-\u{207b}]+ |
     // `%` and `&` are also sigils. Keeping them out of operator runs lets
     // `*%opts` and `|&code` end in a variable.
     "%" "%"? "="? | "&" "&"? "="? |

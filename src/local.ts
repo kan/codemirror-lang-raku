@@ -117,8 +117,8 @@ class Gatherer {
         this.addMethods(child)
       } else if (/Declaration$/.test(name)) this.declaration(child)
       else if (child.firstChild) this.content(child)
-      // The name of a constant with a sigil is a variable after the
-      // declaration node: constant $LIMIT = 3
+      // A constant that is declared with a backslash has its name after
+      // the declaration node: constant \limit = 3
       declaring = name == "ConstantDeclaration" && child.lastChild!.name == "constant"
     }
   }

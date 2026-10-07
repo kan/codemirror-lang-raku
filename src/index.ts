@@ -43,7 +43,7 @@ const baseLanguage = LRLanguage.define({
         Parens: delimitedIndent({closing: ")"}),
         Brackets: delimitedIndent({closing: "]"}),
         // The lines of these are text, which keeps its indentation.
-        "StringLiteral Heredoc Pod BlockComment": () => null
+        "StringLiteral Heredoc Pod BlockComment DocComment": () => null
       }),
       foldNodeProp.add({
         "Block Parens Brackets": foldInside,

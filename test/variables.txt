@@ -138,3 +138,11 @@ Program(VariableName, Brackets(VariableName), Brackets(Brackets(VariableName)), 
 
 Program(VariableName, VariableName, PairKey, VariableName, StringLiteral, VariableName, Operator, Identifier,
   StringLiteral)
+
+# The match cursor variable
+
+$¢, $/, 1
+
+==>
+
+Program(VariableName, VariableName, Number)

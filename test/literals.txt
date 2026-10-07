@@ -138,3 +138,11 @@ v8-engine v2foo v1.2
 ==>
 
 Program(Identifier, Identifier, Version)
+
+# Fractions and superscript powers
+
+½ + ⅔, $x², 2⁻¹ / 3, 1
+
+==>
+
+Program(Number, Operator, Number, VariableName, Operator, Number, Operator, Operator, Number, Number)

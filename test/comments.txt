@@ -78,3 +78,19 @@ say 1;
 ==>
 
 Program(BlockComment)
+
+# Declarator comments with brackets
+
+#|( about
+  foo )
+sub foo { }
+#={ trailing }
+#| a line
+#=not a bracket
+#|( not closed
+sub bar { }
+
+==>
+
+Program(DocComment, RoutineDeclaration(sub, RoutineName, Block), DocComment, DocComment, DocComment,
+  DocComment, RoutineDeclaration(sub, RoutineName, Block))

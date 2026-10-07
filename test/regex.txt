@@ -314,3 +314,67 @@ say 1;
 
 Program(my, VariableName, Operator, Operator, Identifier, Identifier,
   Identifier, Number)
+
+# Curly and corner quotes in a regex
+
+m/ab ‘/’ c ｢d/e｣ „f/g” ‚h/i‘ /, 1
+
+==>
+
+Program(Regex(StringLiteral, StringLiteral, StringLiteral, StringLiteral), Number)
+
+# A list of words in a regex
+
+ok $x ~~ / < a ' b > | <alpha> /, 'x';
+ok $y ~~ /b/;
+
+==>
+
+Program(Identifier, VariableName, Operator, Regex(Assertion, Operator, Assertion), StringLiteral,
+  Identifier, VariableName, Operator, Regex)
+
+# A regex in the arguments of an assertion
+
+ok 'x' ~~ / <prefixed: /d<alpha>+/ > <:name(/:s L/)> <foo(1/2)> <+:Lu +:name(/S/)> /, 1;
+
+==>
+
+Program(Identifier, StringLiteral, Operator, Regex(Assertion, Assertion, Assertion, CharacterClass), Number)
+
+# Code that is interpolated in a regex
+
+ok 'ab' ~~ / $( rx/ a / ) @( 1/2 ) b /, 1;
+
+==>
+
+Program(Identifier, StringLiteral, Operator, Regex(Operator), Number)
+
+# A declaration in a regex
+
+'aba' ~~ / (a) b :my $c = $/; a /; say 1 / 2;
+
+==>
+
+Program(StringLiteral, Operator, Regex(VariableName, VariableName), Identifier, Number, Operator, Number)
+
+# The match variable in a replacement
+
+$s ~~ s/(a)/[$/]/;
+$t ~~ s/.+/$/.chars()/;
+$u ~~ s/a/$/;
+say 1 / 2;
+
+==>
+
+Program(VariableName, Operator, Regex, VariableName, Operator, Regex(Operator), VariableName, Operator, Regex,
+  Identifier, Number, Operator, Number)
+
+# A comparison in the code of a regex
+
+ok '1' ~~ m/ (\d) <?{ $/[*-1] < 5 }> /, 'x';
+ok 2 > 1;
+
+==>
+
+Program(Identifier, StringLiteral, Operator, Regex(Escape, Assertion), StringLiteral,
+  Identifier, Number, Operator, Number)

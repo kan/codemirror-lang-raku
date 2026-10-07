@@ -208,7 +208,7 @@ Program(
   EnumDeclaration(enum, EnumName),
   SubsetDeclaration(subset, SubsetName), of, TypeName, where, Operator, Operator, Number,
   ConstantDeclaration(constant, ConstantName), Operator, Number,
-  my, ConstantDeclaration(constant), VariableName, Operator, Number)
+  my, ConstantDeclaration(constant, ConstantName), Operator, Number)
 
 # Regex declarators
 
@@ -239,3 +239,35 @@ Program(PackageDeclaration(class, PackageName, Block(
   PackageDeclaration(class, PackageName, Block(
     RoutineDeclaration(method, RoutineName, Block(
       RoutineDeclaration(sub, RoutineName, Block))))))))
+
+# A sym adverb after blanks belongs to the name
+
+token c :sym<a> { a }
+rule d :sym«b» { b }
+token e :i { e }
+
+==>
+
+Program(
+  RegexDeclaration(token, RegexName, Block(Regex)),
+  RegexDeclaration(rule, RegexName, Block(Regex)),
+  RegexDeclaration(token, RegexName, PairKey, Block(Regex)))
+
+# Constants with a sigil
+
+my constant $Z = 3;
+constant @A = 1, 2;
+our constant %H = a => 1;
+constant &f = { 1 };
+constant &infix:<plus> = &infix:<+>;
+constant \x = 2;
+
+==>
+
+Program(
+  my, ConstantDeclaration(constant, ConstantName), Operator, Number,
+  ConstantDeclaration(constant, ConstantName), Operator, Number, Number,
+  our, ConstantDeclaration(constant, ConstantName), Operator, Identifier, Operator, Number,
+  ConstantDeclaration(constant, ConstantName), Operator, Block(Number),
+  ConstantDeclaration(constant, ConstantName), Operator, VariableName,
+  ConstantDeclaration(constant), Operator, Identifier, Operator, Number)

@@ -116,3 +116,55 @@ Program(
 ==>
 
 Program(Number, Number, Number)
+
+# Symbols outside of ASCII are operators
+
+$a ⚛+= 1; ⚛$a; 1 ⚡ 2; ¬$x; 3 ⩵ 3
+
+==>
+
+Program(VariableName, Operator, Number, Operator, VariableName, Number, Operator, Number, Operator, VariableName,
+  Number, Operator, Number)
+
+# Set operators in parentheses
+
+$a (<=) $b, @x (elem) $s, <a b> (<) <a b c>.Set, f(-) , ($a) (|) ($b)
+
+==>
+
+Program(VariableName, Operator, VariableName, VariableName, Operator, VariableName,
+  StringLiteral, Operator, StringLiteral, MethodCall(MethodName),
+  Identifier, Parens(Operator), Parens(VariableName), Operator, Parens(VariableName))
+
+# An operator in brackets as a routine
+
+&[+], &[»+»], &[max], &[R[~~]], [1, 2].reduce(&[*]), 1
+
+==>
+
+Program(VariableName, VariableName, VariableName, VariableName,
+  Brackets(Number, Number), MethodCall(MethodName), Parens(VariableName), Number)
+
+# Arguments and a junction that look like those operators
+
+$f(elem); @out.push(cont); $a &[1, 2]
+
+==>
+
+Program(VariableName, Parens(Identifier), VariableName, MethodCall(MethodName), Parens(Identifier),
+  VariableName, Operator, Brackets(Number, Number))
+
+# An operator name in double angles
+
+sub infix:<< stash-eq >> ($a) { }
+sub infix:<<=>($a) { $a >> 1 }
+sub infix:<<=>($a){$a>>1}
+&infix:<<(>=)>>, &infix:«+»
+
+==>
+
+Program(
+  RoutineDeclaration(sub, RoutineName, Parens(VariableName), Block),
+  RoutineDeclaration(sub, RoutineName, Parens(VariableName), Block(VariableName, Operator, Number)),
+  RoutineDeclaration(sub, RoutineName, Parens(VariableName), Block(VariableName, Operator, Number)),
+  VariableName, VariableName)

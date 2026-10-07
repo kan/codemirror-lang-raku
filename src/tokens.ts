@@ -8,7 +8,7 @@ import {
   VariableName, AttributeName, SpecialVariable, operatorVariable,
   Identifier, TypeName, StringLiteral, Interpolation, NestedDelimiters, self, True, False, Nil, multi, proto, only,
   PackageName, RoutineName, methodRoutineName, RegexName, EnumName, SubsetName, ConstantName,
-  methodDot, declaredName, declaredMethodName, smiley, noSmiley, plainName, multiName, multiRoutineName, wordOperator,
+  methodDot, declaredName, declaredMethodName, declaredVariable, smiley, noSmiley, plainName, multiName, multiRoutineName, wordOperator,
   rawString, quoteStart, quoteContent, quoteNestOpen, quoteNestClose, quoteEnd, quotedString, interpolatingWordList,
   regexBody, regexStart, regexBodyEnd, regexLitOpen, regexLitClose,
   regexText, CharacterClass, Assertion, regexQuote, regexOperator, regexComment,
@@ -73,7 +73,7 @@ const enum Ch {
 // embedded comments. Raku accepts any Unicode bracket pair; this lists
 // the ones that are likely to be typed.
 export const brackets: {[open: number]: number} = {}
-for (let pair of ["()", "[]", "{}", "<>", "«»", "「」", "『』", "（）", "［］", "｛｝", "【】", "〈〉", "《》", "〔〕"])
+for (let pair of ["()", "[]", "{}", "<>", "«»", "｢｣", "「」", "『』", "（）", "［］", "｛｝", "【】", "〈〉", "《》", "〔〕"])
   brackets[pair.charCodeAt(0)] = pair.charCodeAt(1)
 
 function isAsciiLetter(ch: number) { return ch >= Ch.a && ch <= Ch.z || ch >= Ch.A && ch <= Ch.Z }
@@ -307,7 +307,7 @@ for (let term of [VariableName, AttributeName, SpecialVariable, operatorVariable
                   regexText, CharacterClass, Assertion, regexQuote, regexOperator, regexComment,
                   regexBlockComment, regexCapture])
   termModes.set(term, Mode.AfterTerm)
-for (let term of [Identifier, TypeName, smiley, noSmiley, declaredName, declaredMethodName, PackageName, RoutineName,
+for (let term of [Identifier, TypeName, smiley, noSmiley, declaredName, declaredMethodName, declaredVariable, PackageName, RoutineName,
                   methodRoutineName, multiName, multiRoutineName, RegexName, EnumName, SubsetName, ConstantName])
   termModes.set(term, Mode.AfterName)
 // The `}` of "{...}" in a string does not take a subscript.
@@ -320,6 +320,10 @@ for (let term of [multi, proto, only]) termModes.set(term, Mode.AfterMulti)
 function modeAfterOperator(first: number, second: number, third: number, after: Mode) {
   // A lone `*` is as often the whatever star as a multiplication.
   if (first == Ch.Star && !isOperatorChar(second)) return Mode.AfterName
+  // A power in superscript, $x², leaves the term complete. These are
+  // the characters that the grammar's Operator token takes for one.
+  if (first == 0xb2 || first == 0xb3 || first == 0xb9 || first == 0x2070 || first >= 0x2074 && first <= 0x207b)
+    return Mode.AfterTerm
   // Postfix increment and decrement leave the term complete.
   if ((first == Ch.Plus || first == Ch.Hyphen) && second == first && !isOperatorChar(third) &&
       (after == Mode.AfterTerm || after == Mode.AfterBlock)) return Mode.AfterTerm
@@ -547,20 +551,29 @@ function inTermPosition(input: InputStream, mode: Mode, size: number) {
 export const blockComment = new ExternalTokenizer(input => {
   let end = embeddedCommentEnd(input, 0)
   if (!end) return
+  // A declarator comment with brackets, #|( ... ) and #=( ... ), is
+  // still a declarator comment.
+  let term = input.peek(1) == Ch.Backtick ? BlockComment : DocComment
   if (end < 0) skipToEnd(input)
   else input.advance(end)
-  input.acceptToken(BlockComment)
+  input.acceptToken(term)
 })
 
 // The offset after the embedded comment that starts at offset `at`.
 // Zero when none starts there, and -1 when it is not closed.
+//
+// A declarator comment with brackets that is not closed is none: it is
+// left to be a comment of one line, so that one that is being typed
+// does not take the declarations after it.
 function embeddedCommentEnd(input: InputStream, at: number) {
-  if (input.peek(at) != Ch.Hash || input.peek(at + 1) != Ch.Backtick) return 0
+  let mark = input.peek(at + 1)
+  if (input.peek(at) != Ch.Hash || mark != Ch.Backtick && mark != Ch.Pipe && mark != Ch.Equals) return 0
   let open = input.peek(at + 2), close = brackets[open]
   if (close == null) return 0
   let count = 1
   while (input.peek(at + 2 + count) == open) count++
-  return rawEnd(input, at + 2 + count, {open, close, count, escapes: false})
+  let end = rawEnd(input, at + 2 + count, {open, close, count, escapes: false})
+  return end < 0 && mark != Ch.Backtick ? 0 : end
 }
 
 function isBlank(ch: number) { return ch == Ch.Space || ch == Ch.Tab || ch == Ch.Return }
@@ -805,7 +818,9 @@ function quoteCharOpening(open: number, close: number, at: number, interpolates:
 // The delimiters, other than brackets, that are accepted after a quote word.
 function isQuoteDelimiter(ch: number) {
   return ch == Ch.Slash || ch == Ch.Bang || ch == Ch.Pipe || ch == Ch.Tilde || ch == Ch.Caret ||
-    ch == Ch.Percent || ch == Ch.At || ch == Ch.DoubleQuote || ch == Ch.Apostrophe
+    ch == Ch.Percent || ch == Ch.At || ch == Ch.DoubleQuote || ch == Ch.Apostrophe || ch == Ch.Backtick ||
+    // A symbol outside of ASCII: Q♥a♥
+    ch > 0xa0 && ch != 0xd7 && ch != 0xf7 && !isIdentifierStart(ch) && !isSpace(ch) && ch < 0xd800
 }
 
 // Reads the start of a quote at offset `at`: a quote character, or a
@@ -817,7 +832,11 @@ function readOpening(input: InputStream, at = 0): Opening | null {
   if (next == Ch.Apostrophe) return quoteCharOpening(next, next, at, 0)
   if (next == 0x201c /* “ */) return quoteCharOpening(next, 0x201d, at, Interpolate.All)
   if (next == 0x2018 /* ‘ */) return quoteCharOpening(next, 0x2019, at, 0)
+  if (next == 0x201e /* „ */) return quoteCharOpening(next, 0x201d, at, Interpolate.All)
+  if (next == 0x201d /* ” */) return quoteCharOpening(next, next, at, Interpolate.All)
+  if (next == 0x201a /* ‚ */) return quoteCharOpening(next, 0x2019, at, 0)
   if (next == 0x300c /* 「 */) return quoteCharOpening(next, 0x300d, at, 0, false)
+  if (next == 0xff62 /* ｢ */) return quoteCharOpening(next, 0xff63, at, 0, false)
   if (!isAsciiLetter(next)) return null
 
   let pos = at + 1
@@ -882,12 +901,12 @@ function readOpening(input: InputStream, at = 0): Opening | null {
 // The offset after the delimiter that closes a quote whose content
 // starts at `pos`, or -1 when it is not closed.
 function rawEnd(input: InputStream, pos: number, opening: Pick<Opening, "open" | "close" | "count" | "escapes">) {
-  let {open, close, count} = opening
+  let {open, close, count} = opening, other = otherClose(open)
   for (let depth = 1;;) {
     let ch = input.peek(pos)
     if (ch < 0) return -1
     if (ch == Ch.Backslash && opening.escapes) pos += 2
-    else if (ch == close && repeats(input, pos, close, count)) {
+    else if (ch == close && repeats(input, pos, close, count) || ch == other) {
       pos += count
       if (--depth == 0) return pos
     } else if (ch == open && repeats(input, pos, open, count)) {
@@ -897,24 +916,104 @@ function rawEnd(input: InputStream, pos: number, opening: Pick<Opening, "open" |
   }
 }
 
+// The character that closes a quote in a regex that opens with `ch`,
+// or 0 when `ch` opens none: 'a', "a", ‘a’, ‚a’, “a”, „a”, ｢a｣
+function quoteClose(ch: number) {
+  return ch == Ch.Apostrophe || ch == Ch.DoubleQuote ? ch : ch == 0x2018 || ch == 0x201a ? 0x2019 :
+    ch == 0x201c || ch == 0x201e ? 0x201d : ch == 0xff62 ? 0xff63 : 0
+}
+
+// A low quote is also closed by the quote that points the other way:
+// ‚a‘, „a“. This is that quote for the given opening one, or -1.
+function otherClose(open: number) { return open == 0x201a ? 0x2018 : open == 0x201e ? 0x201c : -1 }
+
 // The offset after a quoted string that starts at `pos`, or -1.
 function quotedEnd(input: InputStream, pos: number) {
-  let quote = input.peek(pos)
+  let open = input.peek(pos), close = quoteClose(open), other = otherClose(open)
   for (pos++;;) {
     let ch = input.peek(pos)
     if (ch < 0 || ch == Ch.Newline) return -1
-    if (ch == Ch.Backslash) pos += 2
-    else if (ch == quote) return pos + 1
+    // Nothing is escaped in ｢...｣.
+    if (ch == Ch.Backslash && open != 0xff62) pos += 2
+    else if (ch == close || ch == other) return pos + 1
     else pos++
+  }
+}
+
+// The offset after the arguments of the assertion that starts with the
+// `<` at `pos`, or 0 when it has none on its line. The arguments are
+// code, in which the delimiter of the regex does not end it:
+// <name(1/2)>, <:name(/x/)>, <name: /a<b>+/ >
+function assertionArgumentsEnd(input: InputStream, pos: number) {
+  // An assertion can add up several names: <+:Lu +:name(/SMALL/)>
+  for (let at = pos + 1;;) {
+    while (isAssertionMark(input.peek(at)) || isBlank(input.peek(at))) at++
+    let end = nameEnd(input, at)
+    if (end < 0) return 0
+    // With parentheses, up to the one that closes them. After a colon
+    // and a space, up to the `>` that closes the assertion.
+    let open = input.peek(end)
+    if (open == Ch.ParenOpen) return balancedEnd(input, end + 1, Ch.ParenOpen, Ch.ParenClose)
+    if (open == Ch.Colon && isBlank(input.peek(end + 1))) return balancedEnd(input, end + 1, Ch.Less, Ch.Greater)
+    at = end
+    if (!isAssertionMark(input.peek(at)) && !isBlank(input.peek(at))) return 0
+  }
+}
+
+// The characters that come before the name in an assertion: <.ws>, <?before>, <+alpha>
+function isAssertionMark(ch: number) {
+  return ch == Ch.Dot || ch == Ch.Question || ch == Ch.Bang || ch == Ch.Colon || ch == Ch.Amp || ch == Ch.Plus ||
+    ch == Ch.Hyphen
+}
+
+// The offset after the code that the `<` or `:` at `pos` in a regex
+// starts, or 0 when it starts none.
+function regexCodeEnd(input: InputStream, pos: number) {
+  return input.peek(pos) == Ch.Less ? assertionArgumentsEnd(input, pos) : regexDeclarationEnd(input, pos)
+}
+
+// The offset after the declaration that starts with the `:` at `pos`
+// in a regex, or 0 when none does: `:my $c = $/;`. It is code up to
+// its `;`, in which the delimiter of the regex does not end it.
+function regexDeclarationEnd(input: InputStream, pos: number) {
+  let end = nameEnd(input, pos + 1)
+  if (end < 0 || end - pos > 9 || !isBlank(input.peek(end)) ||
+      !/^(my|our|state|constant|temp|let)$/.test(word(input, pos + 1, end))) return 0
+  for (;;) {
+    let ch = input.peek(end)
+    if (ch < 0 || ch == Ch.Newline) return 0
+    if (ch == Ch.Semicolon) return end + 1
+    let quoted = quoteClose(ch) ? quotedEnd(input, end) : -1
+    end = quoted > 0 ? quoted : end + 1
+  }
+}
+
+// The offset after the `close` that matches an `open` before `pos`, or
+// 0 when there is none on the line. Quotes are gone over.
+function balancedEnd(input: InputStream, pos: number, open: number, close: number) {
+  for (let depth = 1;;) {
+    let ch = input.peek(pos)
+    if (ch < 0 || ch == Ch.Newline) return 0
+    if (ch == Ch.Backslash) pos += 2
+    else if (quoteClose(ch)) {
+      let quoted = quotedEnd(input, pos)
+      pos = quoted < 0 ? pos + 1 : quoted
+    } else {
+      pos++
+      if (ch == open) depth++
+      else if (ch == close && --depth == 0) return pos
+    }
   }
 }
 
 // The offset of the delimiter that closes a regex whose content starts
 // at `pos`, or -1. Delimiters do not count inside quotes, character
-// classes, comments and code blocks.
+// classes, comments and code blocks. `code` is set for the inside of a
+// code block, where a `<` is an operator.
 function regexEnd(input: InputStream,
-                  {start: pos, open, close, count}: Pick<Opening, "start" | "open" | "close" | "count">): number {
-  for (let depth = 1;;) {
+                  {start: pos, open, close, count}: Pick<Opening, "start" | "open" | "close" | "count">,
+                  code = false): number {
+  for (let depth = 1, codeEnd;;) {
     let ch = input.peek(pos)
     if (ch < 0) return -1
     if (ch == Ch.Backslash) {
@@ -925,9 +1024,20 @@ function regexEnd(input: InputStream,
     } else if (ch == open && repeats(input, pos, open, count)) {
       pos += count
       depth++
-    } else if (ch == Ch.Apostrophe || ch == Ch.DoubleQuote) {
+    } else if (quoteClose(ch)) {
       let end = quotedEnd(input, pos)
       pos = end < 0 ? pos + 1 : end
+    } else if (!code && ch == Ch.Less && isBlank(input.peek(pos + 1))) {
+      // A list of words, in which quotes are text: < a ' b >
+      let end = pos + 2
+      while (input.peek(end) != Ch.Greater && input.peek(end) != Ch.Newline && input.peek(end) >= 0) end++
+      pos = input.peek(end) == Ch.Greater ? end + 1 : pos + 1
+    } else if (!code && (ch == Ch.Less || ch == Ch.Colon) && (codeEnd = regexCodeEnd(input, pos)) > 0) {
+      pos = codeEnd
+    } else if (!code && (ch == Ch.Dollar || ch == Ch.At) && input.peek(pos + 1) == Ch.ParenOpen) {
+      // Code that is interpolated: $( rx/ a / )
+      let end = balancedEnd(input, pos + 2, Ch.ParenOpen, Ch.ParenClose)
+      pos = end > 0 ? end : pos + 1
     } else if (ch == Ch.Less && (input.peek(pos + 1) == Ch.BracketOpen ||
                (input.peek(pos + 1) == Ch.Hyphen || input.peek(pos + 1) == Ch.Plus) && input.peek(pos + 2) == Ch.BracketOpen)) {
       // <[...]>, <-[...]>, and combinations: <+[a..z]-[aeiou]>
@@ -955,11 +1065,24 @@ function regexEnd(input: InputStream,
       if (end > 0) pos = end
       else while (input.peek(pos) >= 0 && input.peek(pos) != Ch.Newline) pos++
     } else if (ch == Ch.BraceOpen && close != Ch.BraceClose) {
-      let end = regexEnd(input, {start: pos + 1, open: Ch.BraceOpen, close: Ch.BraceClose, count: 1})
+      let end = regexEnd(input, {start: pos + 1, open: Ch.BraceOpen, close: Ch.BraceClose, count: 1}, true)
       pos = end < 0 ? pos + 1 : end + 1
     } else {
       pos++
     }
+  }
+}
+
+// The offset after the `/` that closes the replacement of s/a/b/, which
+// starts at `pos`, or -1. A `$/` in it does not close it, when a `/`
+// follows on the same line: in s/a/$/, the `$` is text.
+function replacementEnd(input: InputStream, pos: number) {
+  for (let match = false;;) {
+    let ch = input.peek(pos)
+    if (ch < 0 || match && ch == Ch.Newline) return -1
+    if (ch == Ch.Slash) return pos + 1
+    if (ch == Ch.Dollar && input.peek(pos + 1) == Ch.Slash) match = true
+    pos += match && ch == Ch.Dollar || ch == Ch.Backslash ? 2 : 1
   }
 }
 
@@ -969,7 +1092,12 @@ function regexTokenEnd(input: InputStream, opening: Opening) {
   if (end < 0) return -1
   end += opening.count
   // s/a/b/ has a second part. s{a} = 'b' does not.
-  if (opening.kind != "regex" && opening.open == opening.close) end = rawEnd(input, end, opening)
+  if (opening.kind != "regex" && opening.open == opening.close) {
+    // A `$/` in the replacement is the match variable, not a `$` before
+    // the closing delimiter: s/(a)/[$/]/. Unless nothing closes it then.
+    let withMatch = opening.close == Ch.Slash ? replacementEnd(input, end) : -1
+    end = withMatch < 0 ? rawEnd(input, end, opening) : withMatch
+  }
   return end
 }
 
@@ -1073,7 +1201,10 @@ function startsDeclarator(name: string) {
   return ["sub", "method", "submethod", "token", "rule", "regex"].some(declarator => declarator.startsWith(name))
 }
 
-const operatorCategory = /^(infix|prefix|postfix|circumfix|postcircumfix|term)$/
+// What stands between the parentheses of a set operator.
+const setOperators = /^(<=?|>=?|<\+|>\+|==|[|&\-^+.]|elem|cont)$/
+
+const operatorCategory =/^(infix|prefix|postfix|circumfix|postcircumfix|term)$/
 
 function isWordOperator(name: string) {
   return name == "x" || name == "xx" || name == "min" || name == "max" || name == "Z" || name == "X"
@@ -1089,6 +1220,16 @@ export const termToken = new ExternalTokenizer((input, stack) => {
     return
   }
   let next = input.next, {mode} = context(stack)
+
+  // The set operators that are written in parentheses: $a (<=) $b, $x (elem) $s
+  // Not right after the term, where the parentheses hold arguments: $f(elem)
+  if (next == Ch.ParenOpen && mode == Mode.AfterTerm && isSpace(input.peek(-1))) {
+    let end = 1
+    while (end < 6 && input.peek(end) != Ch.ParenClose && input.peek(end) >= 0) end++
+    if (input.peek(end) == Ch.ParenClose && setOperators.test(word(input, 1, end)))
+      input.acceptToken(wordOperator, end + 1)
+    return
+  }
 
   if (isIdentifierStart(next)) {
     // The Z, X and R meta operators: Z+, X~, R-, Z=>
@@ -1129,7 +1270,22 @@ export const termToken = new ExternalTokenizer((input, stack) => {
     // space before it, it is a variable: `my Array[Int] %h`.
     if (mode == Mode.AfterTerm && isIdentifierStart(input.peek(1)) && !isSpace(input.peek(-1)))
       return input.acceptToken(wordOperator, 1)
-    // An operator as a routine: &infix:<+>
+    // An operator as a routine: &[+], &[»+»], &[max]
+    // After a term, the `&` is an operator: $a &[1, 2]
+    if (next == Ch.Amp && input.peek(1) == Ch.BracketOpen && mode != Mode.AfterTerm) {
+      // A meta operator brings brackets of its own: &[R[~~]]
+      for (let end = 2, depth = 1; end < 14; end++) {
+        let ch = input.peek(end)
+        if (ch < 0 || isSpace(ch)) break
+        if (ch == Ch.BracketOpen) depth++
+        else if (ch == Ch.BracketClose && --depth == 0) {
+          if (end > 2) input.acceptToken(operatorVariable, end + 1)
+          break
+        }
+      }
+      return
+    }
+    // The same by its full name: &infix:<+>
     if (next == Ch.Amp) {
       let end = nameEnd(input, 1)
       if (end > 0 && operatorCategory.test(word(input, 1, end))) {
@@ -1205,7 +1361,7 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
   if (!inQuoteText(stack)) return
   let {quote} = context(stack)
   if (!quote) return
-  let {open, close, count, interpolates} = quote, nests = open != close
+  let {open, close, count, interpolates} = quote, nests = open != close, other = otherClose(open)
   // After a variable, a subscript or a call continues the interpolation.
   // `[` and `(` are left to the grammar's own tokens.
   if (afterQuotedVariable(stack)) {
@@ -1219,7 +1375,7 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
   for (;;) {
     let next = input.next
     if (next < 0) break
-    let atClose = next == close && repeats(input, 0, close, count)
+    let atClose = next == close && repeats(input, 0, close, count) || next == other
     if (atClose || nests && next == open && repeats(input, 0, open, count)) {
       if (input.pos > start) break
       input.advance(count)
@@ -1313,12 +1469,17 @@ function isRegexOperator(ch: number) {
 // When it is not closed on its line, this is the negated offset of the
 // end of the text that was gone over to find that out.
 function assertionEnd(input: InputStream) {
+  // A list of words, in which quotes and brackets are text: < a ' b >
+  let words = isBlank(input.peek(1))
   for (let pos = 1, depth = 1;;) {
     let ch = input.peek(pos)
     if (ch < 0 || ch == Ch.Newline) return -pos
-    if (ch == Ch.Backslash) {
+    if (words) {
+      pos++
+      if (ch == Ch.Greater) return pos
+    } else if (ch == Ch.Backslash) {
       pos += input.peek(pos + 1) == Ch.Newline || input.peek(pos + 1) < 0 ? 1 : 2
-    } else if (ch == Ch.Apostrophe || ch == Ch.DoubleQuote) {
+    } else if (quoteClose(ch)) {
       let end = quotedEnd(input, pos)
       pos = end < 0 ? pos + 1 : end
     } else if (ch == Ch.BracketOpen) {
@@ -1398,7 +1559,7 @@ export const regexToken = new ExternalTokenizer((input, stack) => {
     skipLine(input)
     return input.acceptToken(regexComment)
   }
-  if (next == Ch.Apostrophe || next == Ch.DoubleQuote) {
+  if (quoteClose(next)) {
     let end = quotedEnd(input, 0)
     if (end > 0 && end <= limit) return input.acceptToken(regexQuote, end)
   } else if (next == Ch.Less || next == Ch.Greater || next == Ch.GuillemetOpen || next == Ch.GuillemetClose ||
@@ -1451,7 +1612,7 @@ export const regexToken = new ExternalTokenizer((input, stack) => {
     input.advance()
     let ch = input.next
     if (ch < 0 || input.pos == literalEnd ||
-        ch == Ch.Newline || ch == Ch.Backslash || ch == Ch.Apostrophe || ch == Ch.DoubleQuote ||
+        ch == Ch.Newline || ch == Ch.Backslash || quoteClose(ch) ||
         ch == Ch.Less || ch == Ch.Greater || ch == Ch.GuillemetOpen || ch == Ch.GuillemetClose ||
         ch == Ch.ParenClose && input.peek(1) == Ch.Greater ||
         ch == Ch.BraceOpen || ch == Ch.BraceClose || ch == Ch.Hash || ch == Ch.Dollar ||
@@ -1494,6 +1655,24 @@ function categoryEnd(input: InputStream, nameStart: number, pos: number) {
   }
   let close = first == Ch.Less ? Ch.Greater : first == Ch.GuillemetOpen ? Ch.GuillemetClose : -1
   if (close < 0) return pos
+  // With double angles, blanks can surround the operator, which can
+  // hold a `>` itself: infix:<< stash-eq >>, infix:<<(>=)>>
+  // When this is not that form, the operator starts with `<`: infix:<<=>
+  if (first == Ch.Less && input.peek(open + 1) == Ch.Less) {
+    let start = blanksEnd(input, open + 2)
+    let closes = (at: number) => input.peek(at) == close && input.peek(at + 1) == close && input.peek(at + 2) != close
+    // An operator is short, and a token must not look far past its end.
+    for (let end = start; end < start + maxGap; end++) {
+      let ch = input.peek(end)
+      // Not a shift in code without spaces: infix:<<=>($a){$a>>1}
+      if (end > start && closes(end) && !continuesName(input, end + 2) && input.peek(end + 2) != Ch.Dollar) return end + 2
+      if (ch < 0 || isSpace(ch)) {
+        let after = blanksEnd(input, end)
+        if (end > start && closes(after)) return after + 2
+        break
+      }
+    }
+  }
   // The two halves of a circumfix are separated by one space.
   let spaces = /circumfix$/.test(word(input, nameStart, pos)) ? 1 : 0
   for (let i = open + 1;; i++) {
@@ -1508,15 +1687,32 @@ function categoryEnd(input: InputStream, nameStart: number, pos: number) {
 // specialized identifiers, and specialization does not look at the
 // parse state, so these positions get tokens of their own.
 export const nameToken = new ExternalTokenizer((input, stack) => {
+  let next = input.next
+  // The name of a constant can have a sigil: constant $LIMIT = 3
+  if ((next == Ch.Dollar || next == Ch.At || next == Ch.Percent || next == Ch.Amp) && stack.canShift(declaredVariable)) {
+    let end = nameEnd(input, 1)
+    // constant &infix:<plus> = &infix:<+>
+    if (end > 0) input.acceptToken(declaredVariable, next == Ch.Amp ? categoryEnd(input, 1, end) : end)
+    return
+  }
   // Only a method declaration takes a mark: `method !private`, `method ^meta`.
-  let mark = input.next == Ch.Bang || input.next == Ch.Caret ? 1 : 0
+  let mark = next == Ch.Bang || next == Ch.Caret ? 1 : 0
   let end = nameEnd(input, mark)
   if (end < 0) return
   if (stack.canShift(MethodName)) {
     if (!mark) input.acceptToken(MethodName, end)
     return
   }
+  let named = end
   end = categoryEnd(input, mark, end)
+  // Blanks can come before the `:sym<...>` of a declaration: token c :sym<a> { a }
+  if (end == named) {
+    let sym = gapEnd(input, end)
+    if (sym > end && word(input, sym, sym + 4) == ":sym") {
+      let symEnd = categoryEnd(input, mark, sym)
+      if (symEnd > sym) end = symEnd
+    }
+  }
   if (!mark && stack.canShift(declaredName)) input.acceptToken(declaredName, end)
   else if (stack.canShift(declaredMethodName)) input.acceptToken(declaredMethodName, end)
 })

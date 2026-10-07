@@ -1,3 +1,49 @@
+## Unreleased
+
+Most of this was found by parsing the test suite of
+[mutsu](https://github.com/tokuhirom/mutsu), an implementation of Raku.
+
+### Breaking changes
+
+- The name of a constant with a sigil, as in `constant $LIMIT = 3`, is a
+  `ConstantName` inside the `ConstantDeclaration`. It was a
+  `VariableName` after the declaration, which had no name.
+- A `:sym<…>` that follows the name of a declaration after blanks, as in
+  `token word :sym<long> { }`, is part of the `RegexName`.
+- A declarator comment with brackets, `#|( … )` or `#=( … )`, is one
+  `DocComment` up to its closing bracket. It ended with its first line,
+  and still does when the bracket is not closed.
+
+### New features
+
+- Corner quotes (`｢…｣`), also after a quote word (`Q｢…｣`), the low
+  curly quotes (`„…”`, `„…“`, `‚…’`, `‚…‘`) and the reversed `”…”`.
+- A quote word takes a backtick or a symbol outside of ASCII for a
+  delimiter: ``qx`…` ``, `Q♥…♥`.
+- Fractions that are one character (`½`, `⅔`) are numbers, and a power
+  in superscript (`$x²`) is an operator.
+- Symbols outside of ASCII are operators: the atomic operators
+  (`⚛+=`), and the operators of one's own (`1 ⚡ 2`).
+- The set operators that are written in parentheses, as in
+  `$a (<=) $b` and `$x (elem) $s`, are operators.
+- An operator in brackets as a routine, as in `&[+]`, is a
+  `VariableName`.
+- The name of an operator can be written in double angles:
+  `infix:<< plus-one >>`, `&infix:<<(>=)>>`.
+- The variable `$¢`.
+
+### Bug fixes
+
+- In a regex, `‘…’`, `“…”`, `‚…’`, `„…”` and `｢…｣` are quotes, in which
+  the delimiter of the regex does not end it: `m/ab ‘/’ c/`.
+- A list of words in a regex, `/ < a ' b > /`, no longer starts a quote
+  at a `'` in it.
+- A regex does not end at its delimiter in code: in the arguments of an
+  assertion (`<name: /a/ >`, `<:name(/a/)>`), in `$( … )`, and in a
+  declaration (`:my $m = $/;`).
+- A `$/` in the replacement of a substitution does not end it:
+  `s/(a)/[$/]/`.
+
 ## 0.3.0 (2026-10-07)
 
 ### Breaking changes

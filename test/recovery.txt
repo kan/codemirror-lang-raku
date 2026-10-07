@@ -169,7 +169,7 @@ Program(Identifier, Parens(Number, my, VariableName, Operator, StringLiteral, �
 
 # Unknown characters
 
-say ¤ 1;
+say 〃 1;
 
 ==>
 

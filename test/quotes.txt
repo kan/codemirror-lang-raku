@@ -630,3 +630,28 @@ Program(StringLiteral(Interpolation(StringLiteral(Interpolation(StringLiteral)))
 
 Program(StringLiteral(VariableName, Interpolation(StringLiteral),
   VariableName, Brackets(StringLiteral)))
+
+# Corner quotes
+
+｢sub foo() { }｣, Q｢a\｣, ｢b｣.chars, 1
+
+==>
+
+Program(StringLiteral, StringLiteral, StringLiteral, MethodCall(MethodName), Number)
+
+# Low and reversed curly quotes
+
+„a $b”, ‚d $e’, ”f”, „g“, ‚h‘, „i „j” k”, 1
+
+==>
+
+Program(StringLiteral(VariableName), StringLiteral, StringLiteral, StringLiteral, StringLiteral,
+  StringLiteral(NestedDelimiters), Number)
+
+# A quote word with a symbol or a backtick for a delimiter
+
+Q♥a♥, qx`echo`, q•b•, 1
+
+==>
+
+Program(StringLiteral, StringLiteral, StringLiteral, Number)

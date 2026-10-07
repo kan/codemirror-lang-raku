@@ -87,8 +87,8 @@ on incomplete code.
 |---|---|
 | `PackageDeclaration` | `class`, `role`, `grammar`, `module`, `package`, with a `PackageName` child, up to the body `Block` or the `;` of a `unit` declaration |
 | `RoutineDeclaration` | `sub`, `method`, `submethod`, with a `RoutineName` child (absent for anonymous routines), up to the body `Block`. Also the `foo(…) { }` of `multi foo(…) { }`, which declares a sub without the word `sub`: that node starts with its `RoutineName` |
-| `RegexDeclaration` | `token`, `rule`, `regex`, with a `RegexName` child, up to the body `Block`, which holds one `Regex` |
-| `EnumDeclaration`, `SubsetDeclaration`, `ConstantDeclaration` | The declarator and its `EnumName`, `SubsetName` or `ConstantName` |
+| `RegexDeclaration` | `token`, `rule`, `regex`, with a `RegexName` child, up to the body `Block`, which holds one `Regex`. The name includes a `:sym<…>`, with the blanks before it if there are any (`word :sym<long>`) |
+| `EnumDeclaration`, `SubsetDeclaration`, `ConstantDeclaration` | The declarator and its `EnumName`, `SubsetName` or `ConstantName`. The name of a constant includes its sigil if it has one (`constant $LIMIT`). A constant without a sigil that is declared with a backslash (`constant \x`) has no `ConstantName` |
 | `Block`, `Parens`, `Brackets` | `{ }`, `( )`, `[ ]` |
 | `VariableName`, `AttributeName`, `SpecialVariable` | `$x` / `$^a`, `$!x` / `$.x`, `$*x` / `$?x` |
 | `StringLiteral` | A quote of any kind. One that interpolates has `Escape`, `Interpolation`, variable, `Brackets`, `Parens` and `MethodCall` children, and a `NestedDelimiters` for each pair of its own delimiters in it (the `[b]` of `qq[a [b] c]`) |
@@ -113,7 +113,9 @@ Not supported yet:
   token, with the code or the nested `<…>` in it, and has to be closed on
   its line unless it is a character class. Groups (`[ ]`, `( )`) and
   adverbs (`:i`, `:my`) are plain text, so the text after `:my` is read
-  as regex.
+  as regex, and so is the code in `$( … )`. Such code does not end the
+  regex when it holds the delimiter (`/ :my $m = $/; /`), if it is on
+  one line.
 - A heredoc is interpolated when everything interpolates in it, as in
   `qq:to`. One that interpolates in part (`q:c:to`, `qq:!s:to`) is not
   highlighted inside. When a line opens several heredocs, they are
@@ -143,8 +145,13 @@ Not supported yet:
   command. Text that unbalances every bracket that is tried gets
   `` #`( `` … `)`, which then does not cover exactly that text.
 - A user-defined operator is recognized where it is declared
-  (`sub infix:<+++>`) and as a routine (`&infix:<+++>`), not where it is
-  used as an operator.
+  (`sub infix:<+++>`) and as a routine (`&infix:<+++>`). Where it is
+  used, it is an operator when it is made of operator characters or of
+  symbols outside of ASCII (`1 ⚡ 2`). One that is a word is a plain
+  name, also between hyper marks (`@a »plus« @b`), and a term or a
+  circumfix of one's own is not known.
+- The `native` declarator, which NativeCall uses internally, does not
+  make a declaration node.
 - Completion does not know types. After a `.` it offers the built-in
   methods and every method that the document declares, whatever the
   invocant is. Names from other files are not offered.
