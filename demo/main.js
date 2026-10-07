@@ -77,6 +77,12 @@ function load(path) {
   view.dispatch({changes: {from: 0, to: view.state.doc.length, insert: samples[path]}, selection: {anchor: 0}})
 }
 
-for (let path of Object.keys(samples)) select.append(new Option(path.replace(/^.*\//, ""), path))
+// The samples that show what a version added come first, the latest
+// version before the others.
+const isNew = path => /\/new-in-/.test(path)
+const paths = Object.keys(samples).sort((a, b) => {
+  return isNew(b) - isNew(a) || (isNew(a) ? b.localeCompare(a, "en", {numeric: true}) : 0)
+})
+for (let path of paths) select.append(new Option(path.replace(/^.*\//, ""), path))
 select.addEventListener("change", () => load(select.value))
 load(select.value)

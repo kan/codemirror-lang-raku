@@ -1,3 +1,23 @@
+## Unreleased
+
+### Breaking changes
+
+- A pair of a quote's own delimiters inside it, as the `[b]` of
+  `qq[a [b] c]`, is a `NestedDelimiters` node in the `StringLiteral`.
+  It was text without a node.
+
+### Bug fixes
+
+- After an edit in a long quote that interpolates and has bracket
+  delimiters (`qq[…]`), the text after a nested `[` could be read as if
+  the quote had ended, and every further edit parsed the quote again
+  from its start.
+- In such a quote, a `[…]` or `(…)` right after a nested pair of
+  delimiters is text, not a subscript or a call: `qq[a [b](c)]`.
+- After an edit, the text of a heredoc could be read as code when a long
+  quote that interpolates and spans several lines followed the opener
+  of the heredoc on its line.
+
 ## 0.2.0 (2026-10-07)
 
 ### New features

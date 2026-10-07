@@ -48,7 +48,19 @@ qq[a [$b] c], qq{a {$b} c}, 1
 
 ==>
 
-Program(StringLiteral(VariableName), StringLiteral(VariableName), Number)
+Program(StringLiteral(NestedDelimiters(VariableName)), StringLiteral(NestedDelimiters(VariableName)), Number)
+
+# Nested delimiters are text, also after a variable or another pair
+
+qq[a [b](c) [d][e] $x [f] $y[1] ], qq[[a [b] ] [[c]] d]], 1
+
+==>
+
+Program(
+  StringLiteral(NestedDelimiters, NestedDelimiters, NestedDelimiters, VariableName, NestedDelimiters,
+    VariableName, Brackets(Number)),
+  StringLiteral(NestedDelimiters),
+  Number)
 
 # Adverbs that switch one kind of interpolation on
 
@@ -58,9 +70,9 @@ q:c[a {1} $x \n], q:s[a {1} $x @y[0]], q:a[$x @y[0] %h<k>], q:h[@y[0] %h<k>], q:
 
 Program(
   StringLiteral(Interpolation(Number)),
-  StringLiteral(VariableName),
+  StringLiteral(VariableName, NestedDelimiters),
   StringLiteral(VariableName, Brackets(Number)),
-  StringLiteral(VariableName),
+  StringLiteral(NestedDelimiters, VariableName),
   StringLiteral(VariableName, Parens(Number)),
   StringLiteral(Escape))
 
@@ -84,7 +96,7 @@ q:closure:scalar[{1} $x @y[0]], q:qq[{1} $x], q:double[\n], Q:c:b[\n {1}], q:w:c
 ==>
 
 Program(
-  StringLiteral(Interpolation(Number), VariableName),
+  StringLiteral(Interpolation(Number), VariableName, NestedDelimiters),
   StringLiteral(Interpolation(Number), VariableName),
   StringLiteral(Escape),
   StringLiteral(Escape, Interpolation(Number)),
@@ -106,7 +118,7 @@ q:c[a \] {1} b], q:c{a \} {1} b}, Q:c[a \], 1
 
 ==>
 
-Program(StringLiteral(Interpolation(Number)), StringLiteral, StringLiteral, Number)
+Program(StringLiteral(Interpolation(Number)), StringLiteral(NestedDelimiters), StringLiteral, Number)
 
 # Adverbs with an argument that switches them off
 

@@ -183,3 +183,21 @@ say 3;
 ==>
 
 Program(Identifier, Parens(Brackets(Number, Number, ⚠)), Identifier, Number)
+
+# Unclosed quote with a nested pair of its delimiters runs to the end
+
+qq[a [b];
+say $x;
+
+==>
+
+Program(StringLiteral(NestedDelimiters, VariableName, ⚠))
+
+# Unclosed nested delimiter in a quote
+
+qq[a [b $x;
+say 1
+
+==>
+
+Program(StringLiteral(NestedDelimiters(VariableName, ⚠), ⚠))

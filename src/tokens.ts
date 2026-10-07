@@ -6,7 +6,7 @@ import {
   PodFormat,
   MethodName, Version, regexLiteral, Regex, transliteration, Operator, Number as NumberTerm, radixNumber, PairKey,
   VariableName, AttributeName, SpecialVariable, operatorVariable,
-  Identifier, TypeName, StringLiteral, Interpolation, self, True, False, Nil, multi, proto, only,
+  Identifier, TypeName, StringLiteral, Interpolation, NestedDelimiters, self, True, False, Nil, multi, proto, only,
   PackageName, RoutineName, methodRoutineName, RegexName, EnumName, SubsetName, ConstantName,
   methodDot, declaredName, declaredMethodName, smiley, noSmiley, plainName, multiName, multiRoutineName, wordOperator,
   rawString, quoteStart, quoteContent, quoteNestOpen, quoteNestClose, quoteEnd, quotedString, interpolatingWordList,
@@ -181,18 +181,13 @@ class Quote {
               readonly open: number,
               readonly close: number,
               readonly count: number,
-              // How many nested opening delimiters are unclosed.
-              readonly depth: number,
               readonly interpolates: number,
               // Whether a backslash that does not start an escape still
               // takes the delimiter after it out of play: q:c[a \] b]
               readonly escapes: boolean) {
     let hash = parent ? parent.hash : 7
-    for (let part of [open, count, depth, interpolates, escapes ? 1 : 0]) hash = (hash * 31 + part) | 0
+    for (let part of [open, count, interpolates, escapes ? 1 : 0]) hash = (hash * 31 + part) | 0
     this.hash = hash
-  }
-  withDepth(depth: number) {
-    return new Quote(this.parent, this.open, this.close, this.count, depth, this.interpolates, this.escapes)
   }
 }
 
@@ -208,7 +203,7 @@ const noHeredocs: readonly OpenHeredoc[] = []
 
 // The quote that the text of a heredoc is read as. It has no
 // delimiters, and ends where the text does.
-const heredocQuote = new Quote(null, -1, -1, 1, 0, Interpolate.All, true)
+const heredocQuote = new Quote(null, -1, -1, 1, Interpolate.All, true)
 
 const enum PodKind {
   // =begin name ... =end name
@@ -316,7 +311,8 @@ for (let term of [Identifier, TypeName, smiley, noSmiley, declaredName, declared
                   methodRoutineName, multiName, multiRoutineName, RegexName, EnumName, SubsetName, ConstantName])
   termModes.set(term, Mode.AfterName)
 // The `}` of "{...}" in a string does not take a subscript.
-for (let term of [quoteContent, Interpolation]) termModes.set(term, Mode.Term)
+for (let term of [quoteContent, quoteNestOpen, quoteNestClose, NestedDelimiters, Interpolation])
+  termModes.set(term, Mode.Term)
 for (let term of [multi, proto, only]) termModes.set(term, Mode.AfterMulti)
 
 // The mode after an operator, from its first three characters. `after`
@@ -405,14 +401,15 @@ function hasNewline(input: InputStream, from: number, to: number) {
 
 // The heredocs that are open after a reused node, of which the input is
 // at the start. As when tokens are shifted, a line break between tokens
-// and the text of a heredoc close the ones before them.
-function heredocsAfter(node: Tree, input: InputStream, before: readonly OpenHeredoc[]) {
+// and the text of a heredoc close the ones before them. `inQuote` tells
+// that the node is a run of pieces of a quote.
+function heredocsAfter(node: Tree, input: InputStream, before: readonly OpenHeredoc[], inQuote: boolean) {
   // Most reused nodes are single tokens.
   if (!node.children.length && !stringTerms.has(node.type.id) && !heredocTerms.has(node.type.id)) return before
   let cursor = node.cursor(), found: {pos: number, heredoc: OpenHeredoc}[] = [], closedAt = -1
   // Goes over the node at the cursor from its end, and tells whether
   // the heredocs before some point in it are closed.
-  function scan(): boolean {
+  function scan(text = false): boolean {
     let type = cursor.type.id, {from, to} = cursor
     if (heredocTerms.has(type)) { closedAt = to; return true }
     let isString = stringTerms.has(type)
@@ -425,7 +422,7 @@ function heredocsAfter(node: Tree, input: InputStream, before: readonly OpenHere
     if (type == Regex || type == StringLiteral) return false
     if (!cursor.lastChild()) return false
     // Between the pieces of a string lies its text, not whitespace.
-    let gaps = !isString
+    let gaps = !isString && !text && type != NestedDelimiters
     for (let gapEnd = to;;) {
       if (gaps && hasNewline(input, cursor.to, gapEnd)) { closedAt = gapEnd; break }
       if (scan()) break
@@ -438,7 +435,8 @@ function heredocsAfter(node: Tree, input: InputStream, before: readonly OpenHere
     cursor.parent()
     return closedAt >= 0
   }
-  scan()
+  // A piece on its own, such as an Interpolation, is a named node.
+  scan(inQuote && node.type.isAnonymous)
   if (!found.length && closedAt < 0) return before
   let after = found.filter(opener => opener.pos >= closedAt).sort((a, b) => a.pos - b.pos).map(opener => opener.heredoc)
   return closedAt < 0 ? before.concat(after) : after.length ? after : noHeredocs
@@ -491,15 +489,9 @@ export const trackContext = new ContextTracker<Context>({
       case quoteStart: {
         let opening = wordListOpening(input, 0) || readOpening(input)
         if (!opening) return context
-        let quote = new Quote(context.quote, opening.open, opening.close, opening.count, 0,
+        let quote = new Quote(context.quote, opening.open, opening.close, opening.count,
                               opening.interpolates, opening.escapes)
         return context.withQuote(Mode.Term, quote, withHeredocAt(context.heredocs, input, 0))
-      }
-      case quoteNestOpen: case quoteNestClose: {
-        let quote = context.quote
-        if (!quote) return context
-        let depth = quote.depth + (term == quoteNestOpen ? 1 : -1)
-        return context.withQuote(Mode.Term, quote.withDepth(depth))
       }
       case quoteEnd:
         return context.withQuote(Mode.AfterTerm, context.quote && context.quote.parent)
@@ -521,8 +513,13 @@ export const trackContext = new ContextTracker<Context>({
     return term == Identifier || term == Interpolation ? context.withMode(modeAfter(term, input, 0, context.mode))
       : context
   },
-  reuse(context, node, _stack, input) {
-    context = context.withHeredocs(heredocsAfter(node, input, context.heredocs))
+  // A node that is reused leaves the quote and the regex of the context
+  // as they are: the grammar pairs the delimiters that nest in a quote
+  // (NestedDelimiters) and the braces of a block, so a node closes what
+  // it opens.
+  reuse(context, node, stack, input) {
+    let inQuote = context.quote != null && inQuoteText(stack)
+    context = context.withHeredocs(heredocsAfter(node, input, context.heredocs, inQuote))
     // The node's positions count from its start, where the input is.
     let last = lastToken(node.topNode)
     // What comes before a trailing `++` in a reused node is a term.
@@ -1193,15 +1190,25 @@ function hasPostfix(input: InputStream, end: number) {
   return methodEnd > 0 && input.peek(methodEnd) == Ch.ParenOpen
 }
 
+// Whether the parser is between the pieces of a quote, as opposed to
+// in the code of a block in it.
+function inQuoteText(stack: Stack) { return stack.canShift(quoteContent) }
+
+// Whether the parser is, in a quote, right after a variable or after a
+// subscript or a call on one: where the grammar takes a quotePostfix.
+// This is asked of the parser and not of the mode, which is not known
+// to this precision after a reused node that ends in text of the quote.
+function afterQuotedVariable(stack: Stack) { return stack.canShift(rawString) }
+
 // The pieces of a quote that interpolates.
 export const quoteToken = new ExternalTokenizer((input, stack) => {
-  if (!stack.canShift(quoteEnd)) return
-  let {quote, mode} = context(stack)
+  if (!inQuoteText(stack)) return
+  let {quote} = context(stack)
   if (!quote) return
   let {open, close, count, interpolates} = quote, nests = open != close
   // After a variable, a subscript or a call continues the interpolation.
   // `[` and `(` are left to the grammar's own tokens.
-  if (mode == Mode.AfterTerm) {
+  if (afterQuotedVariable(stack)) {
     if (input.next == Ch.BracketOpen || input.next == Ch.ParenOpen) return
     let end = subscriptEnd(input)
     if (end > 0) return input.acceptToken(rawString, end)
@@ -1216,7 +1223,8 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
     if (atClose || nests && next == open && repeats(input, 0, open, count)) {
       if (input.pos > start) break
       input.advance(count)
-      return input.acceptToken(!atClose ? quoteNestOpen : quote.depth ? quoteNestClose : quoteEnd)
+      // Inside a nested pair, a closing delimiter closes that pair.
+      return input.acceptToken(!atClose ? quoteNestOpen : stack.canShift(quoteNestClose) ? quoteNestClose : quoteEnd)
     }
     if (next == Ch.Backslash) {
       if (interpolates & Interpolate.Backslash) break
@@ -1464,9 +1472,8 @@ export const methodDotToken = new ExternalTokenizer((input, stack) => {
   if (next == Ch.Question || next == Ch.Plus || next == Ch.Star || next == Ch.Caret || next == Ch.Amp)
     next = input.peek(++size)
   if (!isIdentifierStart(next)) return
-  let {quote, mode} = context(stack)
-  if (quote && stack.canShift(quoteEnd) &&
-      (mode != Mode.AfterTerm || input.peek(nameEnd(input, size)) != Ch.ParenOpen)) return
+  if (context(stack).quote && inQuoteText(stack) &&
+      (!afterQuotedVariable(stack) || input.peek(nameEnd(input, size)) != Ch.ParenOpen)) return
   input.acceptToken(methodDot, size)
 })
 

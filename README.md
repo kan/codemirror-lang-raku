@@ -91,7 +91,7 @@ on incomplete code.
 | `EnumDeclaration`, `SubsetDeclaration`, `ConstantDeclaration` | The declarator and its `EnumName`, `SubsetName` or `ConstantName` |
 | `Block`, `Parens`, `Brackets` | `{ }`, `( )`, `[ ]` |
 | `VariableName`, `AttributeName`, `SpecialVariable` | `$x` / `$^a`, `$!x` / `$.x`, `$*x` / `$?x` |
-| `StringLiteral` | A quote of any kind. One that interpolates has `Escape`, `Interpolation`, variable, `Brackets`, `Parens` and `MethodCall` children |
+| `StringLiteral` | A quote of any kind. One that interpolates has `Escape`, `Interpolation`, variable, `Brackets`, `Parens` and `MethodCall` children, and a `NestedDelimiters` for each pair of its own delimiters in it (the `[b]` of `qq[a [b] c]`) |
 | `Heredoc` | The text of a heredoc, from the line after its `q:to/END/` opener through its terminator. The opener is a `StringLiteral`. The text of a `qq:to` heredoc has the same children as a string that interpolates. The texts of the heredocs that one line opens are a single node |
 | `Regex` | `/…/`, `rx//`, `m//`, `s///`, `tr///`, or the body of a regex declaration. Its children are `CharacterClass` (`<[a..z]>`), `Assertion` (`<name>`, `<?before …>`), `StringLiteral`, `Escape` (`\d`), `Operator` (quantifiers, `\|`, anchors), `VariableName` (`$x`, `$<name>`), `LineComment`, and a `Block` for each `{ }` of code |
 | `LineComment`, `DocComment`, `BlockComment` | `#`, `#|` / `#=`, `` #`( ) `` |

@@ -70,7 +70,9 @@ const baseLanguage = LRLanguage.define({
         PairKey: t.attributeName,
         Number: t.number,
         Version: t.literal,
-        "StringLiteral Heredoc": t.string,
+        // A pair of delimiters in a quote is text of it, and a tag
+        // does not reach the text in a child node.
+        "StringLiteral Heredoc NestedDelimiters": t.string,
         Regex: t.regexp,
         CharacterClass: t.character,
         Assertion: t.function(t.variableName),

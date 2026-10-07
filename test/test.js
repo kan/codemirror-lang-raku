@@ -64,6 +64,14 @@ describe("highlighting", () => {
     ])
   })
 
+  it("styles a nested pair of delimiters as the string around it", () => {
+    assert.deepStrictEqual(highlight("qq[a [b $c] d]"), [
+      ["qq[a [b ", "tok-string"],
+      ["$c", "tok-variableName"],
+      ["] d]", "tok-string"]
+    ])
+  })
+
   it("styles declared names as definitions", () => {
     assert.deepStrictEqual(highlight("class Foo"), [
       ["class", "tok-keyword"],
@@ -279,6 +287,43 @@ describe("incremental parsing", () => {
       }
     })
   }
+
+  // The line breaks in the text of a quote are not the ones between
+  // tokens, which close the heredocs that found no terminator.
+  it("keeps a heredoc open over a reused part of a quote on its line", () => {
+    let parser = rakuLanguage.parser
+    for (let [open, line, close] of [["qq[", "a [ $x\n $y ] b ", "]"], ["qq[", "a $x\n $y b ", "]"], ['"', "a $x\n $y b ", '"']]) {
+      let doc = "say q:to/A/, " + open + line.repeat(800) + close + ";\n text $notvar\n A\nsay 1;\n"
+      for (let at of [20, 3000, doc.length - 60, doc.length - 3]) {
+        let changed = doc.slice(0, at) + "x" + doc.slice(at)
+        let fragments = TreeFragment.applyChanges(TreeFragment.addTree(parser.parse(doc)),
+                                                  [{fromA: at, toA: at, fromB: at, toB: at + 1}])
+        assert.strictEqual(tokens(parser.parse(changed, fragments)), tokens(parser.parse(changed)),
+                           `after an edit at ${at} in ${open} ${JSON.stringify(line)}`)
+      }
+    }
+  })
+
+  // In a long quote, runs of its pieces are reused. One that opened a
+  // nested delimiter without closing it, or that ended in text after a
+  // variable, used to leave the tokenizers with the wrong state.
+  it("reads the nested delimiters of a quote the same after an edit", () => {
+    let parser = rakuLanguage.parser
+    let cases = [["qq[", "a [b $x c] d {$y} e\n", "]"], ["qq[", "say q:c[x {1}], qq:!s[no $s but {$k}];\n", "]"],
+                 ["qq[", "a \\[ [ $x ] b\n", "]"], ["qq[", "a [ $x\n b ] $y\n", "]"], ["qq[", "a $h<[> b [ c ] d\n", "]"],
+                 ["qq[[", "a [ $x ] ] [ b [[ $y ]] c\n", "]]"], ["qq<", "a $h<k> < b $x > c\n", ">"],
+                 ["qq{", "a {$x} b { c $y } d\n", "}"], ["qq(", "f($x) (a $y.m() b) @z[1](2)\n", ")"]]
+    for (let [open, line, close] of cases) {
+      let doc = "say " + open + "\n" + line.repeat(300) + close + ";\nsay 1;\n"
+      for (let at of [45, 1468, 2000, 5000, 6842, doc.length - 300, doc.length - 30]) {
+        let changed = doc.slice(0, at) + "x" + doc.slice(at)
+        let fragments = TreeFragment.applyChanges(TreeFragment.addTree(parser.parse(doc)),
+                                                  [{fromA: at, toA: at, fromB: at, toB: at + 1}])
+        assert.strictEqual(tokens(parser.parse(changed, fragments)), tokens(parser.parse(changed)),
+                           `after an edit at ${at} in ${open} ${JSON.stringify(line)}`)
+      }
+    }
+  })
 })
 
 // A heredoc's token depends on the quotes of the line before it, which

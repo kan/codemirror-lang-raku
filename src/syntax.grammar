@@ -151,12 +151,22 @@ TypeName { capIdentifier (smiley | noSmiley) }
   @top WordList[@name=StringLiteral] { quoteStart quotePart* quoteEnd }
 
   quotePart {
-    quoteContent | quoteNestOpen | quoteNestClose | Escape | Interpolation |
+    quoteContent | NestedDelimiters | Escape | Interpolation |
     // A `$` that does not start a variable is a lone sigil.
-    VariableName | AttributeName | SpecialVariable | sigil |
-    // After a variable: "@a[0]", "&f(1)", "%h<k>", "$o.m()"
-    Brackets | Parens | rawString | MethodCall
+    (VariableName | AttributeName | SpecialVariable | sigil) quotePostfix*
   }
+
+  // A pair of the quote's delimiters inside it: qq[a [b] c]. This is a
+  // node, and not two kinds of part, so that a run of parts that is
+  // reused after an edit closes every delimiter that it opens. Whether
+  // a closing delimiter ends such a pair or the quote is then a matter
+  // of where the parser is, which a reused node cannot get wrong.
+  NestedDelimiters { quoteNestOpen quotePart* quoteNestClose }
+
+  // After a variable: "@a[0]", "&f(1)", "%h<k>", "$o.m()". The
+  // tokenizers tell this position from the text of the quote by whether
+  // rawString can be shifted, which holds whatever was reused before it.
+  quotePostfix { Brackets | Parens | rawString | MethodCall }
 }
 
 Interpolation { "{" element* "}" }

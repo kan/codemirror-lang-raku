@@ -7,7 +7,7 @@ export declare const
   MethodName: number, Version: number, Regex: number, Operator: number, Number: number,
   radixNumber: number, PairKey: number,
   VariableName: number, AttributeName: number, SpecialVariable: number, operatorVariable: number,
-  Identifier: number, TypeName: number, StringLiteral: number, Interpolation: number,
+  Identifier: number, TypeName: number, StringLiteral: number, Interpolation: number, NestedDelimiters: number,
   self: number, True: number, False: number, Nil: number, multi: number, proto: number, only: number,
   PackageName: number, RoutineName: number, methodRoutineName: number, RegexName: number,
   EnumName: number, SubsetName: number, ConstantName: number,
