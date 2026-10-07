@@ -1,4 +1,4 @@
-## Unreleased
+## 0.2.0 (2026-10-07)
 
 ### New features
 
@@ -40,7 +40,6 @@
 - An operator referred to as a routine, as in `&infix:<+>`, is a single
   `VariableName`. Operator names can also be written as `circumfix:<[ ]>`
   and `infix:['+']`.
-
 - `q`, `qq`, `Q` and their variants take a bracket after blanks: `q {…}`,
   `qw <a b>`.
 - An adverb with an argument that is `False` or `0` is switched off:
