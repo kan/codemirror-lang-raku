@@ -3,6 +3,7 @@ export declare const
   PodDirective: number, PodHeading: number, PodStrong: number, PodEmphasis: number,
   PodCode: number, PodLink: number, PodFormat: number,
   BlockComment: number, DocComment: number, LineComment: number, Pod: number, Heredoc: number,
+  rawHeredoc: number, interpolatingHeredoc: number, heredocStart: number,
   MethodName: number, Version: number, Regex: number, Operator: number, Number: number,
   radixNumber: number, PairKey: number,
   VariableName: number, AttributeName: number, SpecialVariable: number, operatorVariable: number,

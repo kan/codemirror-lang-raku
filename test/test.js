@@ -85,6 +85,21 @@ describe("highlighting", () => {
     ])
   })
 
+  it("styles what a heredoc interpolates", () => {
+    assert.deepStrictEqual(highlight("say qq:to/END/;\n  a $b { 1 }\n  END\n"), [
+      ["say", "tok-variableName"],
+      ["qq:to/END/", "tok-string"],
+      [";", "tok-punctuation"],
+      ["\n  a ", "tok-string"],
+      ["$b", "tok-variableName"],
+      [" ", "tok-string"],
+      ["{", "tok-punctuation"],
+      ["1", "tok-number"],
+      ["}", "tok-punctuation"],
+      ["\n  END", "tok-string"]
+    ])
+  })
+
   it("styles the pieces of a regex literal", () => {
     assert.deepStrictEqual(highlight("m:i/ \\d+ <name> { say 1 } /, s/a+/b+/"), [
       ["m:i/ \\d", "tok-string2"],
@@ -282,7 +297,9 @@ describe("incremental parsing of heredocs", () => {
     "putting the opener in a string": ["q:to/END/", 9, '"q:to/END/"'],
     "a comment before the opener": ["q:to/END/", 0, "#`(x) "],
     "renaming the terminator": ["END\n", 3, "EOT"],
-    "an edit in the body": ["body", 4, "x"]
+    "an edit in the body": ["body", 4, "x"],
+    "making the heredoc interpolate": ["q:to", 1, "qq"],
+    "a variable in the body": ["body", 4, "$body"]
   }
   for (let [name, [anchor, size, insert]] of Object.entries(edits)) {
     it(`matches a full parse after ${name}`, () => {
@@ -430,6 +447,13 @@ sub g { }
   it("does not take a Pod block for part of a statement", () => {
     assert.deepStrictEqual(indentation("my $x = 1;\n=begin pod\ntext\n=end pod\nfor @a { }\n=head1 Title\n\n.say;"),
                            [0, 0, null, null, 0, 0, 0, 0])
+  })
+
+  it("does not take the inside of a heredoc or a regex for the end of a statement", () => {
+    assert.deepStrictEqual(indentation("say qq:to/END/;\n  a $b.c()\n  END\n.say;\n+ 1;\nif $x;"),
+                           [0, null, null, 0, 0, 0])
+    assert.deepStrictEqual(indentation("say qq:to/END/;\n  a{1}\n  END\n.say;"), [0, null, null, 0])
+    assert.deepStrictEqual(indentation("my $r = /a+/;\n$r.say;\nmy $s = /a+/\n1;\nmy $t = /a/ +\n  1;"), [0, 0, 0, 0, 0, 2])
   })
 
   it("does not indent the pairs of a hash in braces", keeps(`
@@ -841,6 +865,12 @@ sub other($elsewhere) { my $inner; state $kept }
     assert.strictEqual(complete("'a |'", true), null)
     assert.strictEqual(complete("token t {|}", true), null)
     assert.strictEqual(complete("token t { |a }", true), null)
+  })
+
+  it("completes in the code of a heredoc that interpolates", () => {
+    assert.ok(complete("my $count;\nsay qq:to/END/;\n  { $cou| }\n  END\n").includes("$count"))
+    assert.strictEqual(complete("say qq:to/END/;\n  sa|\n  END\n"), null)
+    assert.ok(complete("say qq:to/END/;\n  text\n  END\nsa|").includes("say"))
   })
 
   it("completes in the code of a regex literal, and after the literal", () => {

@@ -130,6 +130,17 @@ say 1;
 Program(my, VariableName, Operator, Operator, Identifier, Identifier, Identifier,
   Identifier, Number)
 
+# An unclosed block in a heredoc ends with the heredoc
+
+say qq:to/EOT/;
+  a { b
+  EOT
+say 1;
+
+==>
+
+Program(Identifier, StringLiteral, Heredoc(Interpolation(Identifier, TypeName, ⚠)), Identifier, Number)
+
 # Unclosed interpolating quote
 
 say qq[ a $b

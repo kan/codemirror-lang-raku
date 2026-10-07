@@ -12,7 +12,7 @@
 // and that keeps the tokens before it from being reused after an edit.
 // It is an element, which can stand in all but a few of the places
 // where whitespace can.
-@skip { whitespace | LineComment | DocComment | BlockComment | Heredoc }
+@skip { whitespace | LineComment | DocComment | BlockComment | rawHeredoc | interpolatingHeredoc }
 
 element { nonBlock | Block | ";" }
 
@@ -133,6 +133,11 @@ TypeName { capIdentifier (smiley | noSmiley) }
     (podEnd | podEndDirective)
   }
 
+  // The text of a heredoc that interpolates. The parser of Program
+  // reads it as one token, interpolatingHeredoc, and this rule is
+  // parsed over the text of that token.
+  @top HeredocText[@name=Heredoc] { heredocStart quotePart* quoteEnd }
+
   StringLiteral {
     // A quote that does not interpolate is one token.
     rawString |
@@ -199,7 +204,11 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
   podStart[@name=PodDirective], podEnd, podEndDirective[@name=PodDirective], podText,
   PodDirective, PodHeading, PodStrong, PodEmphasis, PodCode, PodLink, PodFormat
 }
-@external tokens heredocToken from "./tokens" { Heredoc }
+@external tokens heredocToken from "./tokens" {
+  rawHeredoc[@name=Heredoc], interpolatingHeredoc[@name=Heredoc],
+  // Empty, at the start of the text of a heredoc that is parsed again.
+  heredocStart
+}
 @external tokens methodDotToken from "./tokens" { methodDot[@name="."] }
 // Names in positions where a word is never a keyword: `method next`, `.default`.
 @external tokens nameToken from "./tokens" { MethodName, declaredName, declaredMethodName }

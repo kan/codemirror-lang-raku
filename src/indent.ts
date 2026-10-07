@@ -20,9 +20,11 @@ const startsWithInfix = new RegExp("^\\s*(?:[~+\\-*/%<>=|&^?!]+[ \\t]+\\S|(?:" +
                                    "|if|unless|for|while|until|given|when|with|without)(?![\\w'-]))")
 const startsWithMethod = /^\s*\.[^\s\d.]/
 
-// The last token of `node`. A string and a Pod block count as one token.
+// The last token of `node`. A string, a regex, a heredoc and a Pod
+// block count as one token: what they end in is not code.
+const wholeTokens = /^(StringLiteral|Regex|Heredoc|Pod)$/
 function lastToken(node: SyntaxNode) {
-  while (node.lastChild && node.name != "StringLiteral" && node.name != "Pod") node = node.lastChild
+  while (node.lastChild && !wholeTokens.test(node.name)) node = node.lastChild
   return node
 }
 

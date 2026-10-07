@@ -92,7 +92,7 @@ on incomplete code.
 | `Block`, `Parens`, `Brackets` | `{ }`, `( )`, `[ ]` |
 | `VariableName`, `AttributeName`, `SpecialVariable` | `$x` / `$^a`, `$!x` / `$.x`, `$*x` / `$?x` |
 | `StringLiteral` | A quote of any kind. One that interpolates has `Escape`, `Interpolation`, variable, `Brackets`, `Parens` and `MethodCall` children |
-| `Heredoc` | The text of a heredoc, from the line after its `q:to/END/` opener through its terminator. The opener is a `StringLiteral` |
+| `Heredoc` | The text of a heredoc, from the line after its `q:to/END/` opener through its terminator. The opener is a `StringLiteral`. The text of a `qq:to` heredoc has the same children as a string that interpolates. The texts of the heredocs that one line opens are a single node |
 | `Regex` | `/…/`, `rx//`, `m//`, `s///`, `tr///`, or the body of a regex declaration. Its children are `CharacterClass` (`<[a..z]>`), `Assertion` (`<name>`, `<?before …>`), `StringLiteral`, `Escape` (`\d`), `Operator` (quantifiers, `\|`, anchors), `VariableName` (`$x`, `$<name>`), `LineComment`, and a `Block` for each `{ }` of code |
 | `LineComment`, `DocComment`, `BlockComment` | `#`, `#|` / `#=`, `` #`( ) `` |
 | `Pod` | `=begin` … `=end` and the other Pod blocks. Its children are `PodDirective` (`=begin`, `=head1`, `=end pod`), `PodHeading` (the text after `=head1`), and the formatting codes `PodStrong` (`B<…>`), `PodEmphasis` (`I<…>`), `PodCode` (`C<…>`), `PodLink` (`L<…>`) and `PodFormat` (the others) |
@@ -114,8 +114,11 @@ Not supported yet:
   its line unless it is a character class. Groups (`[ ]`, `( )`) and
   adverbs (`:i`, `:my`) are plain text, so the text after `:my` is read
   as regex.
-- Nothing is highlighted inside a heredoc: there is no interpolation in
-  a `qq:to` heredoc.
+- A heredoc is interpolated when everything interpolates in it, as in
+  `qq:to`. One that interpolates in part (`q:c:to`, `qq:!s:to`) is not
+  highlighted inside. When a line opens several heredocs, they are
+  interpolated only if all of them are. A `{` that is not closed in the
+  text takes the rest of the heredoc, with its terminator, for code.
 - In Pod, a formatting code is one token: the codes inside it
   (`B<I<…>>`) are not told apart. Formatting codes are left alone in a
   block that is code (`=begin code`, `=code`, `=for code`), but not in a

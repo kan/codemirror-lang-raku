@@ -278,6 +278,53 @@ bar;
 
 Program(Identifier, Parens(StringLiteral, Number), LineComment, Heredoc, Identifier)
 
+# Interpolation in a heredoc
+
+my $t = qq:to/END/.trim;
+  Hello $name, { 1 + 2 } \n @list[0] $obj.method() a@b.c %
+  "quoted" and 'quoted' END
+  END
+say qq:heredoc/END/;
+END
+say 1;
+
+==>
+
+Program(my, VariableName, Operator, StringLiteral, MethodCall(MethodName),
+  Heredoc(VariableName, Interpolation(Number, Operator, Number), Escape, VariableName, Brackets(Number),
+    VariableName, MethodCall(MethodName), Parens),
+  Identifier, StringLiteral, Heredoc, Identifier, Number)
+
+# Heredocs that interpolate in part or not at all are not read inside
+
+say q:to/A/, q:c:to/B/, qq:!s:to/C/, Q:to/D/;
+  $a {1}
+  A
+  $b {1}
+  B
+  $c {1}
+  C
+  $d {1}
+  D
+say qq:to/E/, q:to/F/;
+  $e
+  E
+  $f
+  F
+say qq:to/G/, qq:to/H/;
+  $g
+  G
+  $h
+  H
+say 1;
+
+==>
+
+Program(Identifier, StringLiteral, StringLiteral, StringLiteral, StringLiteral, Heredoc,
+  Identifier, StringLiteral, StringLiteral, Heredoc,
+  Identifier, StringLiteral, StringLiteral, Heredoc(VariableName, VariableName),
+  Identifier, Number)
+
 # Two heredocs on one line
 
 say q:to/A/, q:to/B/;

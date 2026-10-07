@@ -14,6 +14,9 @@
 - Pod blocks have child nodes for their directives (`PodDirective`),
   headings (`PodHeading`) and formatting codes (`PodStrong`,
   `PodEmphasis`, `PodCode`, `PodLink`, `PodFormat`), which are highlighted.
+- Variables, blocks and escapes are interpolated in the text of a
+  `qq:to` heredoc. Its `Heredoc` node has the children of a string that
+  interpolates.
 - Variables, blocks and escapes are interpolated in `<<…>>` and `«…»`
   word lists of up to 24 characters.
 - Completion offers the names that the document declares: the variables

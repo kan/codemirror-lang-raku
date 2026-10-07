@@ -1,7 +1,7 @@
 import {ContextTracker, ExternalTokenizer, InputStream, Stack} from "@lezer/lr"
 import {Tree, SyntaxNode} from "@lezer/common"
 import {
-  BlockComment, DocComment, LineComment, Pod, Heredoc,
+  BlockComment, DocComment, LineComment, Pod, Heredoc, rawHeredoc, interpolatingHeredoc, heredocStart,
   podStart, podEnd, podEndDirective, podText, PodDirective, PodHeading, PodStrong, PodEmphasis, PodCode, PodLink,
   PodFormat,
   MethodName, Version, regexLiteral, Regex, transliteration, Operator, Number as NumberTerm, radixNumber, PairKey,
@@ -196,7 +196,19 @@ class Quote {
   }
 }
 
-const noHeredocs: readonly string[] = []
+// A heredoc that was opened, and whose text has not started yet.
+interface OpenHeredoc {
+  // The line that ends it holds only this.
+  readonly terminator: string
+  // Whether it interpolates everything, as qq:to does.
+  readonly interpolates: boolean
+}
+
+const noHeredocs: readonly OpenHeredoc[] = []
+
+// The quote that the text of a heredoc is read as. It has no
+// delimiters, and ends where the text does.
+const heredocQuote = new Quote(null, -1, -1, 1, 0, Interpolate.All, true)
 
 const enum PodKind {
   // =begin name ... =end name
@@ -248,17 +260,17 @@ class Context {
   readonly hash: number
   constructor(readonly mode: Mode,
               readonly quote: Quote | null,
-              // The terminators of the heredocs that were opened on the
-              // current line, whose text starts on the next one.
-              readonly heredocs: readonly string[],
+              // The heredocs that were opened on the current line, whose
+              // text starts on the next one.
+              readonly heredocs: readonly OpenHeredoc[],
               readonly pod: PodBlock | null,
               // The body of a regex declaration that this is in.
               readonly regex: RegexBody | null,
               hash = -1) {
     if (hash < 0) {
       hash = (quote ? quote.hash : 0) ^ (pod ? pod.hash : 0) ^ (regex ? regex.hash : 0)
-      for (let terminator of heredocs) {
-        hash = (hash * 31 + 17) | 0
+      for (let {terminator, interpolates} of heredocs) {
+        hash = (hash * 31 + (interpolates ? 19 : 17)) | 0
         for (let i = 0; i < terminator.length; i++) hash = (hash * 31 + terminator.charCodeAt(i)) | 0
       }
       // Negative values stand for "not worked out yet".
@@ -269,7 +281,7 @@ class Context {
   withMode(mode: Mode) {
     return mode == this.mode ? this : new Context(mode, this.quote, this.heredocs, this.pod, this.regex, this.hash)
   }
-  withHeredocs(heredocs: readonly string[]) {
+  withHeredocs(heredocs: readonly OpenHeredoc[]) {
     return heredocs == this.heredocs ? this : new Context(this.mode, this.quote, heredocs, this.pod, this.regex)
   }
   withQuote(mode: Mode, quote: Quote | null, heredocs = this.heredocs) {
@@ -346,12 +358,22 @@ function modeAfter(term: number, input: InputStream, offset: number, before: Mod
   return modeAfterChar(first)
 }
 
-const skippedTerms = new Set([LineComment, DocComment, BlockComment, Heredoc, Pod, podStart, podEnd, podEndDirective,
+// The context at the start of a parse. The tokens that start the parse
+// of the inside of another token are only looked for while the context
+// is still this one, which spares asking the parser whether they can
+// be shifted at every other token.
+const startContext = new Context(Mode.Term, null, noHeredocs, null, null)
+
+// The tokens of the text of a heredoc, and the tree of its inside,
+// which takes the place of the token of one that interpolates.
+const heredocTerms = new Set([rawHeredoc, interpolatingHeredoc, Heredoc])
+
+const skippedTerms = new Set([LineComment, DocComment, BlockComment, ...heredocTerms, Pod, podStart, podEnd, podEndDirective,
                               podText, PodDirective, PodHeading, PodStrong, PodEmphasis, PodCode, PodLink, PodFormat])
 
-// The terminator that the quote at offset `at` names, when that quote
-// opens a heredoc: END for q:to/END/
-function heredocTerminator(input: InputStream, at: number) {
+// The heredoc that the quote at offset `at` opens, when it opens one.
+// Its terminator is what the quote holds: END for q:to/END/
+function heredocAt(input: InputStream, at: number): OpenHeredoc | null {
   let first = input.peek(at)
   if (first != Ch.q && first != Ch.Q) return null
   let opening = readOpening(input, at)
@@ -360,14 +382,15 @@ function heredocTerminator(input: InputStream, at: number) {
   while (input.peek(end) != opening.close && input.peek(end) != Ch.Newline && input.peek(end) >= 0) end++
   // An empty one, as in the `q:to//` of a quote that is being typed,
   // would end the heredoc at the next blank line.
-  return word(input, opening.start, end).trim() || null
+  let terminator = word(input, opening.start, end).trim()
+  return terminator ? {terminator, interpolates: opening.interpolates == Interpolate.All} : null
 }
 
 // `heredocs`, with the heredoc that the quote at offset `at` opens, if
 // it opens one.
-function withHeredocAt(heredocs: readonly string[], input: InputStream, at: number) {
-  let terminator = heredocTerminator(input, at)
-  return terminator == null ? heredocs : heredocs.concat(terminator)
+function withHeredocAt(heredocs: readonly OpenHeredoc[], input: InputStream, at: number) {
+  let heredoc = heredocAt(input, at)
+  return heredoc ? heredocs.concat(heredoc) : heredocs
 }
 
 function hasNewline(input: InputStream, from: number, to: number) {
@@ -378,18 +401,18 @@ function hasNewline(input: InputStream, from: number, to: number) {
 // The heredocs that are open after a reused node, of which the input is
 // at the start. As when tokens are shifted, a line break between tokens
 // and the text of a heredoc close the ones before them.
-function heredocsAfter(node: Tree, input: InputStream, before: readonly string[]) {
+function heredocsAfter(node: Tree, input: InputStream, before: readonly OpenHeredoc[]) {
   // Most reused nodes are single tokens.
-  if (!node.children.length && node.type.id != StringLiteral && node.type.id != Heredoc) return before
-  let cursor = node.cursor(), found: {pos: number, terminator: string}[] = [], closedAt = -1
+  if (!node.children.length && node.type.id != StringLiteral && !heredocTerms.has(node.type.id)) return before
+  let cursor = node.cursor(), found: {pos: number, heredoc: OpenHeredoc}[] = [], closedAt = -1
   // Goes over the node at the cursor from its end, and tells whether
   // the heredocs before some point in it are closed.
   function scan(): boolean {
     let type = cursor.type.id, {from, to} = cursor
-    if (type == Heredoc) { closedAt = to; return true }
+    if (heredocTerms.has(type)) { closedAt = to; return true }
     if (type == StringLiteral) {
-      let terminator = heredocTerminator(input, from)
-      if (terminator != null) found.push({pos: from, terminator})
+      let heredoc = heredocAt(input, from)
+      if (heredoc) found.push({pos: from, heredoc})
     }
     if (!cursor.lastChild()) return false
     // Between the pieces of a string lies its text, not whitespace.
@@ -408,7 +431,7 @@ function heredocsAfter(node: Tree, input: InputStream, before: readonly string[]
   }
   scan()
   if (!found.length && closedAt < 0) return before
-  let after = found.filter(heredoc => heredoc.pos >= closedAt).sort((a, b) => a.pos - b.pos).map(heredoc => heredoc.terminator)
+  let after = found.filter(opener => opener.pos >= closedAt).sort((a, b) => a.pos - b.pos).map(opener => opener.heredoc)
   return closedAt < 0 ? before.concat(after) : after.length ? after : noHeredocs
 }
 
@@ -426,9 +449,12 @@ function lastToken(node: SyntaxNode): SyntaxNode | null {
 }
 
 export const trackContext = new ContextTracker<Context>({
-  start: new Context(Mode.Term, null, noHeredocs, null, null),
+  start: startContext,
   shift(context, term, _stack, input) {
-    if (term == Heredoc) return context.withHeredocs(noHeredocs)
+    if (term == rawHeredoc || term == interpolatingHeredoc) return context.withHeredocs(noHeredocs)
+    // The text of a heredoc that interpolates is read by a parser of
+    // its own, as a quote without delimiters.
+    if (term == heredocStart) return context.withQuote(Mode.Term, heredocQuote)
     if (term == podStart) return context.withPod(readPodStart(input))
     if (term == podEnd || term == podEndDirective) return context.withPod(null)
     if (skippedTerms.has(term)) return context
@@ -1136,6 +1162,8 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
     if (end > 0) return input.acceptToken(rawString, end)
   }
   let start = input.pos
+  // The text of a heredoc ends where the input does.
+  if (input.next < 0 && quote == heredocQuote) return input.acceptToken(quoteEnd)
   for (;;) {
     let next = input.next
     if (next < 0) break
@@ -1168,13 +1196,21 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
 // up to the line that holds only its terminator. As a skipped token, it
 // leaves the rest of the opener's line to be parsed as usual. The
 // context holds the terminators of the heredocs that the line opened.
+//
+// The text is one token, also when it interpolates: that it has a
+// terminator has to be known where it starts. A text in which
+// everything interpolates is a token of its own kind, the inside of
+// which is parsed again (see index.ts), from an empty token that puts
+// the quote in the context. When a line opens several heredocs, their
+// texts are one token, which interpolates if all of them do.
 export const heredocToken = new ExternalTokenizer((input, stack) => {
+  if (context(stack) == startContext && stack.canShift(heredocStart)) return input.acceptToken(heredocStart)
   let {heredocs} = context(stack)
   if (!heredocs.length) return
   let pos = blanksEnd(input, 0)
   if (input.peek(pos) != Ch.Newline) return
   input.advance(pos)
-  for (let terminator of heredocs) {
+  for (let {terminator} of heredocs) {
     for (;;) {
       // Without its terminator, this is not taken to be a heredoc.
       if (input.next < 0) return
@@ -1186,7 +1222,7 @@ export const heredocToken = new ExternalTokenizer((input, stack) => {
       skipLine(input)
     }
   }
-  input.acceptToken(Heredoc)
+  input.acceptToken(heredocs.every(heredoc => heredoc.interpolates) ? interpolatingHeredoc : rawHeredoc)
 })
 
 const regexDeclarator = /^(token|rule|regex)$/
@@ -1265,11 +1301,11 @@ function assertionEnd(input: InputStream) {
 // context tells whether the position is in such a body, and whether it
 // is in a block of code there, which is left to the other tokenizers.
 export const regexToken = new ExternalTokenizer((input, stack) => {
-  let {regex} = context(stack), next = input.next
+  let current = context(stack), {regex} = current, next = input.next
   if (!regex || regex.braces > 0) {
     // At the start of the parse of the inside of a regex literal, the
     // opening delimiter: `/`, or a quote word with its adverbs: rx:i/
-    if (!regex && stack.canShift(regexLitOpen)) {
+    if (current == startContext && stack.canShift(regexLitOpen)) {
       let opening = regexOpening(input)
       if (opening) input.acceptToken(regexLitOpen, opening.start)
       return
