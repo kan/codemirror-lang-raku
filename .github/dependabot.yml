@@ -1,5 +1,27 @@
 version: 2
 updates:
+  # Updates the npm dependencies. All of them go into one PR: every PR touches
+  # package-lock.json, so separate PRs conflict with each other after one is merged.
+  #
+  # versioning-strategy: this package is a library, and the lower bound of a range in
+  # "dependencies" decides which versions its users can have. increase-if-necessary keeps a
+  # range as it is while the new version is inside it (only package-lock.json changes), and
+  # rewrites it only when the new version is outside it (a new major).
+  #
+  # cooldown: only take a version some days after it is published. A broken or hijacked release
+  # is usually pulled within a few days. Security updates are not delayed by it.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    versioning-strategy: increase-if-necessary
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      npm:
+        patterns:
+          - "*"
   # Updates the actions of .github/workflows. The PRs also rewrite the entries of
   # .github/workflows/actions.lock.
   #
