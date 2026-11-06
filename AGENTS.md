@@ -138,6 +138,7 @@ npm への反映が間に合わずに失敗したときは、Actions の画面�
 | `CHANGELOG.md` | 利用者向けの変更履歴（英語）。挙動か公開インターフェースを変えたら、先頭の `## Unreleased` の節に足す。節が無ければ作る |
 | `scripts/release-notes.js` | CHANGELOG から、`package.json` の版の節を取り出す。`release.yml` と `prepublishOnly` が使う。npm には含めない |
 | `.github/workflows/` | `test.yml`（テスト）、`demo.yml`（デモの公開）、`release.yml`（タグの push で GitHub Releases に登録） |
+| `.github/workflows/actions.lock` | action の commit の固定。`gh actions-lock` が作り、`verify-lockfile.yml` が検査する。手で編集しない。`uses:` は完全な版のタグ（`@v7.0.1`）で書き、変えたら repo のルートで `gh actions-lock` を実行して、workflow と一緒にコミットする |
 
 **npm に入るのは `dist/index.*` だけ**（`package.json` の `files`）。`src/index.ts` が別ファイルの型を
 export すると、`dist/index.d.ts` が tarball に無い `./complete` などを参照する。`test/test.js` の
