@@ -18,6 +18,13 @@ updates:
     cooldown:
       default-days: 7
       semver-major-days: 14
+    ignore:
+      # With TypeScript 7.0, @rollup/plugin-typescript (12.3.1) throws while rollup loads the
+      # config ("Cannot read properties of undefined (reading 'ES2015')", PR #18), so the build
+      # fails. Only 7.0.x is ignored, so the PR for 7.1 still comes and CI decides whether it
+      # works. If 7.1 still fails, add 7.1.x here.
+      - dependency-name: typescript
+        versions: ["7.0.x"]
     groups:
       npm:
         patterns:
