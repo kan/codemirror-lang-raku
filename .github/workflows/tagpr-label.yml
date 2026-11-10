@@ -1,0 +1,24 @@
+# Rebuilds the release pull request when one of its labels (tagpr:minor, say)
+# is added or removed: marks it draft and starts tagpr.yml on its branch with
+# workflow_dispatch. Merged without the rebuild, it would release the version
+# it had before the label.
+#
+# The job is the shared workflow of kan/tagpr-scripts ("The tagpr workflow" of
+# scripts/tagpr/README.md). It checks nothing out, so pull_request_target runs
+# no code from the pull request.
+name: tagpr-label
+
+on:
+  pull_request_target:
+    types: [labeled, unlabeled]
+
+permissions: {}
+
+jobs:
+  rebuild:
+    # The same commit as the line in tagpr.yml. test.yml checks it with
+    # scripts/tagpr/verify-subtree.mjs.
+    uses: kan/tagpr-scripts/.github/workflows/tagpr-label.yml@5798ef5c805057f28d47b7b518c2c1d067f55407
+    permissions:
+      actions: write        # start tagpr.yml
+      pull-requests: write  # mark the release pull request draft
