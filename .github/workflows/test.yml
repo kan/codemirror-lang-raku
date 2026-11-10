@@ -21,6 +21,11 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
+      # scripts/tagpr/ (a git subtree of kan/tagpr-scripts) and the commit
+      # that tagpr.yml and tagpr-label.yml call are the same. Uses no
+      # dependencies, so it comes before npm ci.
+      - name: Check scripts/tagpr/ against the tagpr workflow pin
+        run: node scripts/tagpr/verify-subtree.mjs
       - run: npm ci
       - run: npm test
       # The files that would be published.

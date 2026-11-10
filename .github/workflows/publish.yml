@@ -1,0 +1,188 @@
+# Publishes a version tag to npm, then registers its GitHub release.
+#
+# tagpr.yml starts this with workflow_dispatch on the tag it made for a merged
+# release pull request: a tag pushed with GITHUB_TOKEN does not start
+# "push: tags". "push: tags" is for a tag pushed again by hand.
+#
+# The jobs are split by what they may do. Dependency code (the install
+# scripts of npm ci, the build, the tests) runs only in build, which can
+# write nothing.
+#
+# | Job | Permissions | Does |
+# |---|---|---|
+# | build | contents: read | Checks, tests, npm pack. Leaves the release notes (notes) and the tarball (package) as artifacts |
+# | publish | id-token: write | npm publish of that tarball. No checkout, no npm ci |
+# | release | contents: write | The GitHub release from notes. Does not touch npm |
+#
+# Dependency code in a job with id-token: write could get an OIDC token for
+# npm and publish anything through the Trusted Publisher. What the split does
+# not prevent: dependency code in build (a rollup plugin, say) can change
+# dist/, and that tarball is what goes out.
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# One run per tag, never cancelled: stopped halfway, a version could be on
+# npm with no release.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  build:
+    # workflow_dispatch can be started on a branch too. Stop the whole job
+    # then; the other two follow through needs.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ github.ref_name }}
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # The history, to see that the tag is on main.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      # The next two steps use only Node's built-in modules, so they come
+      # before npm ci: a wrong tag pushed by hand fails without waiting for
+      # the dependencies.
+      # A version like 1.0.0-rc.1 is a prerelease: it goes to npm under the
+      # dist-tag next, so that it does not become latest, and its GitHub
+      # release is marked as one.
+      - name: Check that the tag is the version of package.json, on main
+        id: version
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::The tag $TAG does not match version $version of package.json"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::The commit of $TAG is not on main"
+            exit 1
+          fi
+          case "$version" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+      # The section of CHANGELOG.md becomes the text of the release. Without
+      # it, stop before npm, so that no version is on npm without a release.
+      - name: Take the release notes from CHANGELOG.md
+        run: |
+          mkdir -p "$RUNNER_TEMP/notes"
+          node scripts/tagpr/release-notes.mjs "$TAG" > "$RUNNER_TEMP/notes/release-notes.md"
+      # Before npm ci, so that dependency code cannot change the notes.
+      # overwrite is for "Re-run all jobs".
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: notes
+          path: ${{ runner.temp }}/notes/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+      - run: npm ci
+      - run: npm test
+      # npm test has built dist/ (pretest), so pack that same build without
+      # running prepare again. The tarball is what is published.
+      - name: Pack the tarball
+        run: |
+          mkdir -p "$RUNNER_TEMP/package"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/package"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: package
+          path: ${{ runner.temp }}/package/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      # npm's Trusted Publishing (OIDC): npm is told to accept a publish from
+      # this workflow of this repository, so no token is kept in a secret.
+      # It also adds provenance. The Trusted Publisher on npm has to allow
+      # direct publishing; with only "npm stage publish" allowed, npm publish
+      # fails with "403 OIDC permission denied".
+      id-token: write
+    steps:
+      # registry-url as in npm's guide. setup-node then writes a
+      # NODE_AUTH_TOKEN line to .npmrc with a placeholder value. npm tries
+      # OIDC first, but when the exchange fails it falls back to the
+      # placeholder and fails with 401 or 404: look at id-token and the
+      # Trusted Publisher then, not at a token.
+      # check-latest keeps an older 24.x of the runner from being used.
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          check-latest: true
+          registry-url: https://registry.npmjs.org
+      # Trusted Publishing needs npm 11.5.1 or later. The npm of Node 24 is
+      # enough, so no npm is installed here.
+      - name: Check the version of npm
+        run: |
+          npm_version="$(npm --version)"
+          if [ "$(printf '%s\n' 11.5.1 "$npm_version" | sort -V | head -n1)" != 11.5.1 ]; then
+            echo "::error::npm $npm_version has no Trusted Publishing (11.5.1 or later is needed)"
+            exit 1
+          fi
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: package
+          path: ${{ runner.temp }}/package
+      # A tarball runs no lifecycle scripts when published.
+      - name: Publish to npm
+        env:
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        run: |
+          shopt -s nullglob
+          tgz=("$RUNNER_TEMP"/package/*.tgz)
+          if [ "${#tgz[@]}" -ne 1 ]; then
+            echo "::error::Not exactly one tarball: ${tgz[*]}"
+            exit 1
+          fi
+          if [ "$PRERELEASE" = true ]; then
+            npm publish "${tgz[0]}" --tag next
+          else
+            npm publish "${tgz[0]}"
+          fi
+
+  release:
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: notes
+          path: ${{ runner.temp }}/notes
+      # After npm publish (needs), so that no release is left for a version
+      # that failed to publish. When only this job fails, re-run it alone:
+      # gh run rerun <run ID> --failed. A release that is already there (made
+      # by hand, say) gets the notes and the title instead.
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --title "${TAG#v}" --notes-file "$RUNNER_TEMP/notes/release-notes.md" --prerelease="$PRERELEASE"
+          else
+            gh release create "$TAG" --verify-tag --title "${TAG#v}" --notes-file "$RUNNER_TEMP/notes/release-notes.md" --prerelease="$PRERELEASE"
+          fi

@@ -275,20 +275,18 @@ npm run dev  # serves demo/, an editor next to the syntax tree of its content
 
 The demo loads the sources, so a change to the grammar shows up on reload.
 
-To release a version:
+Changes go in through pull requests. A pull request that changes what
+users get adds its entry under `## [Unreleased]` in `CHANGELOG.md`. One
+that adds a feature also adds a sample of it to
+`test/fixtures/new-in-<next minor version>.raku` (`new-in-0.5.raku`, say),
+and is labelled `enhancement` to make the next release a minor one.
 
-1. When the version adds features, add a sample of them as
-   `test/fixtures/new-in-1.2.raku`, and see that the tests pass with it
-   and that its tree is the intended one. The demo shows it first.
-2. Run `npm version 1.2.3 --no-git-tag-version`, and turn the
-   `## Unreleased` heading of `CHANGELOG.md` into `## 1.2.3 (2026-01-31)`.
-   Commit and push.
-3. Run `npm publish` from that commit. It first runs the tests and checks
-   that `CHANGELOG.md` has that section and that nothing is uncommitted.
-4. Tag that commit `v1.2.3` and push the tag. A workflow then checks that
-   the tag matches `package.json` and that npm has the version, published
-   from that commit, and creates the GitHub release from the section of
-   `CHANGELOG.md`.
+Releases are made with [tagpr](https://github.com/Songmu/tagpr). It keeps
+a release pull request open that bumps the version and turns
+`## [Unreleased]` into the version's section. Merging it tags the merge
+commit, and a workflow then publishes the version to npm with Trusted
+Publishing and creates the GitHub release from the section of
+`CHANGELOG.md`.
 
 ## License
 

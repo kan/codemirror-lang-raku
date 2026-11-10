@@ -1,4 +1,22 @@
-## 0.4.0 (2026-10-07)
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Internal
+
+- Releases are prepared by [tagpr](https://github.com/Songmu/tagpr): a
+  release pull request carries the version bump and this file's section,
+  and merging it tags the release and publishes it to npm with
+  [Trusted Publishing](https://docs.npmjs.com/trusted-publishers), with
+  provenance. The text of each GitHub release is still this file's section
+  for the version.
+
+## [0.4.0] - 2026-10-07
 
 Most of this was found by parsing the test suite of
 [mutsu](https://github.com/tokuhirom/mutsu), an implementation of Raku.
@@ -44,7 +62,7 @@ Most of this was found by parsing the test suite of
 - A `$/` in the replacement of a substitution does not end it:
   `s/(a)/[$/]/`.
 
-## 0.3.0 (2026-10-07)
+## [0.3.0] - 2026-10-07
 
 ### Breaking changes
 
@@ -64,7 +82,7 @@ Most of this was found by parsing the test suite of
   quote that interpolates and spans several lines followed the opener
   of the heredoc on its line.
 
-## 0.2.0 (2026-10-07)
+## [0.2.0] - 2026-10-07
 
 ### New features
 
@@ -130,7 +148,7 @@ Most of this was found by parsing the test suite of
   longer starts a heredoc. Heredocs are now found from the quote tokens
   of the line, not from its text.
 
-## 0.1.0 (2026-10-06)
+## [0.1.0] - 2026-10-06
 
 ### New features
 
@@ -146,3 +164,8 @@ First release.
   of Pod blocks, heredocs and embedded comments
 - Completion of keywords and of the commonly used built-in types,
   routines, methods and special variables
+
+[0.4.0]: https://github.com/kan/codemirror-lang-raku/releases/tag/v0.4.0
+[0.3.0]: https://github.com/kan/codemirror-lang-raku/releases/tag/v0.3.0
+[0.2.0]: https://github.com/kan/codemirror-lang-raku/releases/tag/v0.2.0
+[0.1.0]: https://github.com/kan/codemirror-lang-raku/releases/tag/v0.1.0

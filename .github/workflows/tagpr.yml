@@ -1,0 +1,45 @@
+# Keeps the release pull request up to date, and when it is merged, tags the
+# merge commit and starts publish.yml on the tag. The settings are in .tagpr,
+# the steps in AGENTS.md ("公開の手順").
+#
+# The job is the shared workflow of kan/tagpr-scripts (scripts/tagpr/ holds a
+# copy). How it behaves, and what to do when it fails, is in "The tagpr
+# workflow" of scripts/tagpr/README.md.
+#
+# - On each push to main, tagpr rebuilds the release pull request (branch
+#   tagpr-from-v<previous version>) on top of main. tagpr bumps package.json;
+#   scripts/tagpr/release-prepare.mjs brings package-lock.json along and turns
+#   "## [Unreleased]" of CHANGELOG.md into the version's section.
+# - Once the release pull request is merged, the next run tags the merge
+#   commit (annotated) and starts publish.yml with workflow_dispatch on the
+#   tag: a tag pushed with GITHUB_TOKEN does not start "push: tags".
+# - workflow_dispatch rebuilds the release pull request. tagpr-label.yml
+#   starts it when a label of the release pull request changes, so keep the
+#   name of this file and its workflow_dispatch trigger.
+name: tagpr
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# No concurrency here. The job of the shared workflow already queues the runs
+# one at a time, and a group of the same name here would deadlock.
+jobs:
+  tagpr:
+    # The commit of kan/tagpr-scripts pulled into scripts/tagpr/. Move it in
+    # the same pull request as the subtree pull. A reusable workflow of another
+    # repository is not pinned by actions.lock; test.yml checks this line with
+    # scripts/tagpr/verify-subtree.mjs.
+    uses: kan/tagpr-scripts/.github/workflows/tagpr.yml@5798ef5c805057f28d47b7b518c2c1d067f55407
+    # The most the shared workflow gets. All four are needed.
+    permissions:
+      contents: write       # push the release branch and the tag
+      pull-requests: write  # open and update the release pull request
+      issues: read          # read labels
+      actions: write        # start publish.yml
+    with:
+      release-workflow: publish.yml
