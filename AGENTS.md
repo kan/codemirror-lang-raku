@@ -127,7 +127,8 @@ node -e 'import("./dist/index.js").then(m => console.log(m.rakuLanguage.parser.p
    - 変更されたファイルが `package.json` と `package-lock.json`（版の行だけ）、`CHANGELOG.md`
      （見出しとリンク定義）だけであること
    - リリース PR の CI が承認待ち（`action_required`）で止まることがある（GITHUB_TOKEN が作った
-     PR のため）。そのときは Actions の画面から承認する
+     PR のため）。そのときは Actions の画面から承認する。**必須のチェック（ruleset `protect-main`）
+     なので、承認して通るまでマージできない**
 2. **CHANGELOG の節を確かめる。** この節がそのまま GitHub Releases の本文になる。前回のタグからの
    変更（`git log --oneline v<前回の版>..origin/main`）と突き合わせる。直すときは、リリース PR の
    ブランチではなく、main の `## [Unreleased]` を直す PR を入れる（リリース PR のブランチは
@@ -168,6 +169,14 @@ main の版を rc にする必要があり、tagpr の版の計算と衝突す�
 
 ### リポジトリと npm の設定（repo の外にあるもの）
 
+- ruleset `protect-main`（既定のブランチが対象。2026-11-10 に設定）
+  - 削除と force push を禁じる
+  - **変更は PR を通す**（承認の数は 0）。マージの方法は squash とマージコミットだけ（subtree を
+    取り込む PR がマージコミットを使う）
+  - **必須のチェックは `test (22)`、`test (24)`、`Verify actions.lock`。** `test.yml` の Node の版を
+    変えたら、ruleset の必須のチェックも直す。直さないと、来ないチェックを待って PR がマージできない
+  - bypass は管理者に、PR の中でだけ許す（`bypass_mode: pull_request`）。管理者でも main へ直接
+    push はできない。tagpr は main へ push しない（リリース PR のブランチとタグだけ）ので阻まれない
 - GitHub の「Allow GitHub Actions to create and approve pull requests」を有効にしている。tagpr が
   GITHUB_TOKEN でリリース PR を作るのに要る
 - npm の `codemirror-lang-raku` に、Trusted Publisher として `kan/codemirror-lang-raku` の
