@@ -14,7 +14,9 @@
 // where whitespace can.
 @skip { whitespace | LineComment | DocComment | BlockComment | rawHeredoc | interpolatingHeredoc }
 
-element { nonBlock | Block | ";" }
+// The text of a heredoc is an element where one can stand, and is
+// skipped elsewhere (see heredocToken in tokens.ts).
+element { nonBlock | Block | ";" | heredocElement | interpolatingHeredocElement }
 
 // Everything that can appear between a declarator and its body.
 nonBlock {
@@ -223,6 +225,7 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 }
 @external tokens heredocToken from "./tokens" {
   rawHeredoc[@name=Heredoc], interpolatingHeredoc[@name=Heredoc],
+  heredocElement[@name=Heredoc], interpolatingHeredocElement[@name=Heredoc],
   // Empty, at the start of the text of a heredoc that is parsed again.
   heredocStart
 }
