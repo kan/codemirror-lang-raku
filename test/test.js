@@ -1123,12 +1123,31 @@ sub other($elsewhere) { my $inner; state $kept }
     assert.deepStrictEqual(complete("my $a; my\nfoo $b; say $|"), ["$a"])
   })
 
+  it("finds the variables that are declared with a type of the document that is not capitalized", () => {
+    assert.deepStrictEqual(complete("class foo { }\nmy foo $x;\nsay $|"), ["$x"])
+    assert.deepStrictEqual(complete("my $a; subset pos of Int where * > 0; my pos @p; { has bar $.b; say @| }").sort(), ["@p"])
+    assert.deepStrictEqual(complete("my class point { }; sub f { my point $p; say $| }"), ["$p"])
+    assert.deepStrictEqual(complete("class foo { }; my foo:D $x; my foo(Str) $y; my foo[Int] @z; say $|").sort(), ["$x", "$y"])
+    // Declared in a scope that is not around the variable, it is not known there.
+    assert.deepStrictEqual(complete("{ class foo { } }; my $a; my foo $x; say $|"), ["$a"])
+    assert.deepStrictEqual(complete("my $a; my foo $x; sub f { class foo { }; say $| }"), ["$a"])
+    // A placeholder variable after an unfinished `my` declares itself.
+    assert.deepStrictEqual(complete("{ my\nsay $^a; say $| }").sort(), ["$^a", "$a"])
+    // A word that the document does not declare as a type is still a call.
+    assert.deepStrictEqual(complete("class foo { }; my $a; my\nsay $b; say $|"), ["$a"])
+    // Nothing is offered for the variable that is being made up.
+    assert.strictEqual(complete("class foo { }; my $v; my foo $n|"), null)
+    assert.strictEqual(complete("class foo { }; my $v; my foo $|"), null)
+    assert.strictEqual(complete("class foo { }; my $v; my foo:D $|"), null)
+    assert.strictEqual(complete("class foo { }; my $v; my foo(Str) $|"), null)
+  })
+
   // The names of the parts of a document that an edit leaves alone are
   // kept, which must give what gathering them all over again gives.
   it("offers what a fresh state offers after edits", function() {
     this.timeout(20000)
     let snippets = ["my int $q; ", "my ", "\\", "{", "}", "(", ")", " ", "\n", ";", "$x", "sub g { }", "class C { has $.c; method m { } }",
-                    "constant ", "%h", "Foo", "{ $^p }", "\"", "=begin pod\n"]
+                    "constant ", "%h", "Foo", "{ $^p }", "\"", "=begin pod\n", "my foo $t; ", "class foo { } "]
     let parsed = state => {
       ensureSyntaxTree(state, state.doc.length, 1e9)
       return state.update({}).state
