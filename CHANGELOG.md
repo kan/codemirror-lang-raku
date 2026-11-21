@@ -16,11 +16,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - After an edit, what follows a prefix `++` or `--` could be read
   differently than in a parse from scratch: the name in `++x` could
   become an operator.
+- Completion offers the variables that are declared with a native type
+  or a coercion type, as in `my int @a`, `my num $n` and
+  `my Foo(Str) $x`, and offers nothing for the variable that such a
+  declaration is making up, as in `my int $new`.
 
 ### Performance
 
 - Reparsing after an edit is faster in a huge quote: a 1-character edit
   in a `"…"` or `qq[…]` of about 200 KB takes 55–70% of the time it did.
+- The first completion after an edit no longer gathers the names of the
+  whole scope again. The parts of the document that the edit leaves
+  alone keep what they declare. In a document of about 17,000 lines, it
+  takes under 1 ms, down from about 9 ms.
 
 ### Dependencies
 
