@@ -247,13 +247,41 @@ describe("lookahead", () => {
 // small edits, and check that reparsing with the old tree gives the
 // same tokens as parsing from scratch. Only the tokens are compared:
 // around a syntax error, the two can recover into differently nested
-// trees, and both are valid.
-function tokens(tree) {
+// trees, and both are valid. After an error, even the tokens can differ
+// (see assertSameTokensUpToError).
+function tokenList(tree) {
   let result = []
   tree.iterate({enter(node) {
-    if (!node.type.isError && !node.node.firstChild) result.push(`${node.name}@${node.from}-${node.to}`)
+    if (!node.type.isError && !node.node.firstChild) result.push({name: node.name, from: node.from, to: node.to})
   }})
-  return result.join(" ")
+  return result
+}
+
+function tokens(tree) {
+  return tokenList(tree).map(t => `${t.name}@${t.from}-${t.to}`).join(" ")
+}
+
+// @lezer/lr reuses a node of the old tree even when it holds the
+// recovery from a syntax error, and does not run the recovery again.
+// That recovery was chosen for the parse stack of the old document. A
+// full parse of the new one, with another stack at that error, can
+// recover in another way, and read the code after it differently (a
+// string as code, for instance). So when the tokens differ, the first
+// token that differs has to start where an error node of one of the
+// two trees starts. A difference that starts anywhere else still fails.
+// Returns whether all the tokens are the same.
+function assertSameTokensUpToError(incremental, full, message) {
+  let a = tokenList(incremental), b = tokenList(full), i = 0
+  let same = (x, y) => x.name == y.name && x.from == y.from && x.to == y.to
+  while (i < a.length && i < b.length && same(a[i], b[i])) i++
+  if (i == a.length && i == b.length) return true
+  let at = Math.min(a[i] ? a[i].from : Infinity, b[i] ? b[i].from : Infinity), atError = false
+  for (let tree of [incremental, full]) tree.iterate({enter(node) {
+    if (node.type.isError && node.from == at) atError = true
+    return !atError && node.from <= at && node.to >= at
+  }})
+  if (!atError) assert.strictEqual(tokens(incremental), tokens(full), message)
+  return false
 }
 
 describe("incremental parsing", () => {
@@ -280,13 +308,35 @@ describe("incremental parsing", () => {
         else insert = snippets[random(snippets.length)]
         doc = doc.slice(0, from) + insert + doc.slice(to)
         fragments = TreeFragment.applyChanges(fragments, [{fromA: from, toA: to, fromB: from, toB: from + insert.length}])
-        let tree = parser.parse(doc, fragments)
-        assert.strictEqual(tokens(tree), tokens(parser.parse(doc)),
-                           `after edit ${i} at ${from}: ${JSON.stringify(insert)}`)
-        fragments = TreeFragment.addTree(tree, fragments)
+        let tree = parser.parse(doc, fragments), full = parser.parse(doc)
+        let same = assertSameTokensUpToError(tree, full, `after edit ${i} at ${from}: ${JSON.stringify(insert)}`)
+        // After a difference from an error, go on from the full parse, so
+        // that the next edits do not carry the difference on, and are
+        // compared after the error too.
+        fragments = same ? TreeFragment.addTree(tree, fragments) : TreeFragment.addTree(full)
       }
     })
   }
+
+  // Issue 41. The old tree drops the `]`, in the block of `f`. With the
+  // `}` inserted, that block is closed before the `]`, and a full parse
+  // closes the interpolation there, reading up to the `"` in `f("x(y)")`
+  // as text. The reused node keeps the old recovery, so the tokens
+  // differ from the `]` on.
+  it("lets the tokens differ only from an error that a reused node keeps", () => {
+    let parser = rakuLanguage.parser, line = "    my $a = 1;\n"
+    let prev = 'say "{\nsub f {\n    if 1 {\n' + line.repeat(5) + "    }\n" + line.repeat(400) +
+      '    my @a]b = f(1), f("x(y)"), 2;\n}\n'
+    let at = prev.indexOf("if 1 {") + 6, doc = prev.slice(0, at) + "}" + prev.slice(at)
+    let fragments = TreeFragment.applyChanges(TreeFragment.addTree(parser.parse(prev)),
+                                              [{fromA: at, toA: at, fromB: at, toB: at + 1}])
+    let incremental = parser.parse(doc, fragments), full = parser.parse(doc)
+    assert.notStrictEqual(tokens(incremental), tokens(full), "the case no longer makes the tokens differ")
+    assert.strictEqual(assertSameTokensUpToError(incremental, full, "issue 41"), false)
+    // A difference with no error where it starts still fails.
+    assert.throws(() => assertSameTokensUpToError(parser.parse("say 1;"), parser.parse("say x;"), "no error"),
+                  assert.AssertionError)
+  })
 
   // The line breaks in the text of a quote are not the ones between
   // tokens, which close the heredocs that found no terminator.
