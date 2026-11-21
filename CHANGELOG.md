@@ -39,6 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whole scope again. The parts of the document that the edit leaves
   alone keep what they declare. In a document of about 17,000 lines, it
   takes under 1 ms, down from about 9 ms.
+- While a `"…` or `qq[…` is not closed, an edit before or after it no
+  longer reparses the whole document. Such a quote still runs to the end
+  of the document, and is now closed there, also when a `{` of an
+  interpolation in it is open. In a document of about 3,500 lines, a
+  1-character edit takes 1–2 ms, down from 25–55 ms. The tree of such a
+  quote changes: it no longer ends in an error node, as in
+  `StringLiteral(VariableName)` for `"oops $x`. An error node is still
+  left in what the quote does not close itself, such as a `{` or a
+  nested `[` of its delimiters. A backslash at the end of such a quote
+  is part of its text, and no longer an operator after it.
 
 ### Dependencies
 
