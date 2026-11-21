@@ -50,6 +50,9 @@ nonBlock {
   wordOperator |
   "," |
   ":" |
+  // A lookup by name, ::('Foo'), the end of a package's name, Foo::<$x>,
+  // and the name of an anonymous class: class :: { }
+  "::" |
   "." |
   sigil
 }
@@ -196,8 +199,9 @@ keyword {
 
   kw<"and"> | kw<"or"> | kw<"not"> | kw<"xor"> | kw<"so"> |
   kw<"andthen"> | kw<"orelse"> | kw<"notandthen"> |
-  // `x`, `xx`, `min` and `max` are not here: they are operators only
-  // where an operator is expected, which termToken decides.
+  // `x`, `xx`, `min`, `max`, `before` and the like are not here: they
+  // are operators only where an operator is expected, which termToken
+  // decides.
   kw<"div"> | kw<"mod"> | kw<"gcd"> | kw<"lcm"> |
   kw<"eq"> | kw<"ne"> | kw<"lt"> | kw<"gt"> | kw<"le"> | kw<"ge"> |
   kw<"cmp"> | kw<"leg"> | kw<"eqv"> | kw<"but"> |
@@ -255,7 +259,9 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
 }
 
 @tokens {
-  whitespace { @whitespace+ }
+  // With the byte order mark that a file can start with. Keep this in
+  // sync with isSpace in tokens.ts.
+  whitespace { (@whitespace | "\u{feff}")+ }
 
   LineComment { "#" ![\n]* }
   DocComment { "#" $[|=] ![\n]* }
@@ -276,7 +282,9 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
   qualifiedWord { word qualifiedRest }
 
   identifier { lowerStart wordRest qualifiedRest }
-  capIdentifier { capStart wordRest qualifiedRest }
+  // A type capture, ::T, and the compile-time types such as ::?CLASS are
+  // types too.
+  capIdentifier { ("::" "?"?)? capStart wordRest qualifiedRest }
 
   PairKey { ":" "!"? qualifiedWord }
 
@@ -284,11 +292,12 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
   // first, so that it wins whenever it matches.
   @precedence {
     AttributeName, SpecialVariable, VariableName,
-    radixNumber, PairKey, Operator, sigil, ":", "."
+    radixNumber, PairKey, capIdentifier, Operator, sigil, "::", ":", "."
   }
 
   sigilChar { $[$@%&] }
-  VariableName { sigilChar $[\^:]? qualifiedWord | "$" @digit+ | "$" $[/!\u{a2}] }
+  // $::x is looked up from the outside in.
+  VariableName { sigilChar ($[\^:] | "::")? qualifiedWord | "$" @digit+ | "$" $[/!\u{a2}] }
   AttributeName { sigilChar $[!.] qualifiedWord }
   SpecialVariable { sigilChar $[*?=~] qualifiedWord }
   sigil { $[$@] }
@@ -330,11 +339,11 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
     // `%` and `&` are also sigils. Keeping them out of operator runs lets
     // `*%opts` and `|&code` end in a variable.
     "%" "%"? "="? | "&" "&"? "="? |
-    ".." "."? "^"? | ".=" | "::"? ":=" | "=:="
+    ".." "."? "^"? | ".=" | ":=" | "::=" | "=:="
   }
 
   "{" "}" "(" ")" "[" "]"
-  "," ";" ":" "."
+  "," ";" ":" "::" "."
 }
 
 @detectDelim

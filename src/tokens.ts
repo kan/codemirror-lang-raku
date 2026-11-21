@@ -81,10 +81,11 @@ function isAsciiLetter(ch: number) { return ch >= Ch.a && ch <= Ch.z || ch >= Ch
 
 function isDigit(ch: number) { return ch >= Ch._0 && ch <= Ch._9 }
 
-// The characters of the grammar's whitespace token.
+// The characters of the grammar's whitespace token, the byte order mark among them.
 function isSpace(ch: number) {
   return ch == Ch.Space || ch >= Ch.Tab && ch <= Ch.Return || ch == 0x85 || ch == 0xa0 || ch == 0x1680 ||
-    ch >= 0x2000 && ch <= 0x200a || ch == 0x2028 || ch == 0x2029 || ch == 0x202f || ch == 0x205f || ch == 0x3000
+    ch >= 0x2000 && ch <= 0x200a || ch == 0x2028 || ch == 0x2029 || ch == 0x202f || ch == 0x205f || ch == 0x3000 ||
+    ch == 0xfeff
 }
 
 // Keep these ranges in sync with identifierStart in syntax.grammar. The
@@ -364,6 +365,15 @@ function modeAfterChar(first: number) {
 // often named that.
 const termWords = /^(pi|π|tau|τ|now|time|rand)$/
 
+// Whether the `<` at offset `at` follows the key of a pair, as in
+// :ver<1> and :auth<zef:me>, and not a qualified name: Foo::Bar<x>
+function isPairValue(input: InputStream, at: number) {
+  let pos = at - 1
+  while (pos > at - maxGap && continuesName(input, pos)) pos--
+  return pos < at - 1 && input.peek(pos) == Ch.Colon && input.peek(pos - 1) != Ch.Colon &&
+    isIdentifierStart(input.peek(pos + 1))
+}
+
 // The mode after the token of the given term at the input's position.
 // `before` is the mode before it, and `size` the token's length, which
 // only an operator needs: one can be cut short of the operator
@@ -375,6 +385,10 @@ function modeAfter(term: number, input: InputStream, offset: number, before: Mod
     // Most names are longer than these, and are not looked at further.
     if (end - offset <= 4 && termWords.test(word(input, offset, end))) return Mode.AfterTerm
   }
+  // The value of a pair, as in :ver<1>, can be followed by a term: the
+  // import list of `use Foo:ver<1> <a b>`. Spacing decides, as after a name.
+  if ((term == rawString || term == quotedString) && input.peek(offset) == Ch.Less && isPairValue(input, offset))
+    return Mode.AfterName
   let mode = termModes.get(term)
   if (mode != null) return mode
   let first = input.peek(offset)
@@ -652,7 +666,9 @@ function embeddedCommentEnd(input: InputStream, at: number) {
   return end < 0 && mark != Ch.Backtick ? 0 : end
 }
 
-function isBlank(ch: number) { return ch == Ch.Space || ch == Ch.Tab || ch == Ch.Return }
+// The byte order mark counts, so that a directive after it, at the start
+// of a file, is at the start of a line.
+function isBlank(ch: number) { return ch == Ch.Space || ch == Ch.Tab || ch == Ch.Return || ch == 0xfeff }
 
 // The offset of the first character at or after `pos` that is not a blank.
 function blanksEnd(input: InputStream, pos: number) {
@@ -1294,8 +1310,27 @@ const setOperators = /^(<=?|>=?|<\+|>\+|==|[|&\-^+.]|elem|cont)$/
 
 const operatorCategory =/^(infix|prefix|postfix|circumfix|postcircumfix|term)$/
 
-function isWordOperator(name: string) {
-  return name == "x" || name == "xx" || name == "min" || name == "max" || name == "Z" || name == "X"
+// The infixes that are words and are not keywords of the grammar. They
+// are operators only where one is expected.
+const wordOperators = /^(x|xx|min|max|minmax|ff|fff|before|after|unicmp|coll|Z|X)$/
+
+// The infixes that are words, which the Z, X and R meta operators can
+// take: Zmin, Xeq, Rcmp
+const metaWordOperators = /^(x|xx|min|max|minmax|eq|ne|lt|gt|le|ge|eqv|cmp|leg|unicmp|coll|before|after|div|mod|gcd|lcm|ff|fff)$/
+
+// Whether the word from 0 to `end` is an infix: x, before, Zmin, Rcmp
+function isWordOperator(input: InputStream, end: number) {
+  if (end > 7) return false
+  let name = word(input, 0, end), first = name.charCodeAt(0)
+  return wordOperators.test(name) ||
+    (first == Ch.Z || first == Ch.X || first == Ch.R) && metaWordOperators.test(name.slice(1))
+}
+
+// Whether an infix is expected: after a term, or after a block on the
+// same line, which is a subscript or a term itself: %h{$k} x 3,
+// { rand } xx 3. A line break after a block ends the statement.
+function infixExpected(input: InputStream, mode: Mode) {
+  return mode == Mode.AfterTerm || mode == Mode.AfterBlock && !atLineStart(input)
 }
 
 // The length of the operator at the start of a run of operator
@@ -1383,7 +1418,7 @@ export const termToken = new ExternalTokenizer((input, stack) => {
 
   // The set operators that are written in parentheses: $a (<=) $b, $x (elem) $s
   // Not right after the term, where the parentheses hold arguments: $f(elem)
-  if (next == Ch.ParenOpen && mode == Mode.AfterTerm && isSpace(input.peek(-1))) {
+  if (next == Ch.ParenOpen && isSpace(input.peek(-1)) && infixExpected(input, mode)) {
     let end = 1
     while (end < 6 && input.peek(end) != Ch.ParenClose && input.peek(end) >= 0) end++
     if (input.peek(end) == Ch.ParenClose && setOperators.test(word(input, 1, end)))
@@ -1393,8 +1428,8 @@ export const termToken = new ExternalTokenizer((input, stack) => {
 
   if (isIdentifierStart(next)) {
     // The Z, X and R meta operators: Z+, X~, R-, Z=>
-    if (mode == Mode.AfterTerm && (next == Ch.Z || next == Ch.X || next == Ch.R) &&
-        isOperatorChar(input.peek(1)) && !continuesName(input, 1)) {
+    if ((next == Ch.Z || next == Ch.X || next == Ch.R) && isOperatorChar(input.peek(1)) && !continuesName(input, 1) &&
+        infixExpected(input, mode)) {
       let pos = 2
       while (isOperatorChar(input.peek(pos))) pos++
       return input.acceptToken(wordOperator, pos)
@@ -1424,15 +1459,15 @@ export const termToken = new ExternalTokenizer((input, stack) => {
     // with parentheses: take(1). They are 2 to 7 characters long.
     if (input.peek(end) == Ch.ParenOpen && end <= 7 && callableKeywords.test(word(input, 0, end)))
       return input.acceptToken(plainName, end)
-    if (mode == Mode.AfterTerm) {
-      // x, xx, min, max, Z and X are operators where one is expected.
-      if (end <= 3 && isWordOperator(word(input, 0, end))) input.acceptToken(wordOperator, end)
-      return
-    }
+    if (infixExpected(input, mode) && isWordOperator(input, end)) return input.acceptToken(wordOperator, end)
+    if (mode == Mode.AfterTerm) return
   } else if (next == Ch.Percent || next == Ch.Amp) {
     // Squeezed between two terms, a sigil is the operator: $a%b. With a
-    // space before it, it is a variable: `my Array[Int] %h`.
-    if (mode == Mode.AfterTerm && isIdentifierStart(input.peek(1)) && !isSpace(input.peek(-1)))
+    // space before it, it is a variable: `my Array[Int] %h`. So it is
+    // after a lone sigil, which makes a container of it: $%h, @%h
+    let before = input.peek(-1)
+    if (mode == Mode.AfterTerm && isIdentifierStart(input.peek(1)) && !isSpace(before) &&
+        before != Ch.Dollar && before != Ch.At)
       return input.acceptToken(wordOperator, 1)
     // An operator as a routine: &[+], &[»+»], &[max]
     // After a term, the `&` is an operator: $a &[1, 2]
@@ -1873,8 +1908,8 @@ export const methodDotToken = new ExternalTokenizer((input, stack) => {
 // none there. The name before it runs from `nameStart` to `pos`.
 function categoryEnd(input: InputStream, nameStart: number, pos: number) {
   if (input.peek(pos) != Ch.Colon) return pos
-  let open = pos + 1
-  if (word(input, open, open + 3) == "sym") open += 3
+  let open = pos + 1, sym = word(input, open, open + 3) == "sym"
+  if (sym) open += 3
   let first = input.peek(open)
   if (first == Ch.BracketOpen) {
     // Only a quoted operator: ['+']
@@ -1903,6 +1938,11 @@ function categoryEnd(input: InputStream, nameStart: number, pos: number) {
       }
     }
   }
+  // A `:sym<…>` that holds a pair of brackets with a space between them,
+  // as the sym of a circumfix does: token b:sym<{ }>
+  let inner = brackets[input.peek(open + 1)]
+  if (sym && inner != null && input.peek(open + 2) == Ch.Space && input.peek(open + 3) == inner &&
+      input.peek(open + 4) == close) return open + 5
   // The two halves of a circumfix are separated by one space.
   let spaces = /circumfix$/.test(word(input, nameStart, pos)) ? 1 : 0
   for (let i = open + 1;; i++) {

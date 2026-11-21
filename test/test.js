@@ -957,6 +957,8 @@ describe("completion", () => {
     assert.deepStrictEqual(complete("sprin|"), ["sprintf"])
     assert.deepStrictEqual(complete("my IO::Pa|"), ["IO::Path"])
     assert.deepStrictEqual(complete("{ els|"), ["elsif", "else"])
+    // The colons of a type that is looked up from the outside in.
+    assert.deepStrictEqual(complete("say ::Rati|"), ["Rational"])
   })
 
   it("completes methods after a dot", () => {

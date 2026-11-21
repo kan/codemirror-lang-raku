@@ -253,6 +253,34 @@ Program(
   RegexDeclaration(rule, RegexName, Block(Regex)),
   RegexDeclaration(token, RegexName, PairKey, Block(Regex)))
 
+# A sym adverb that holds brackets with a space between them
+
+token i:sym<{ }> { a }
+token p:sym<( )> { b }
+token c :sym<[ ]> { c }
+
+==>
+
+Program(
+  RegexDeclaration(token, RegexName, Block(Regex)),
+  RegexDeclaration(token, RegexName, Block(Regex)),
+  RegexDeclaration(token, RegexName, Block(Regex)))
+
+# Type captures and the types of the current package
+
+role R[::T] { }
+sub f(::T $t, Mu ::U) { }
+method m(::?CLASS:D: $x) { ::?ROLE }
+class :: { }
+
+==>
+
+Program(
+  PackageDeclaration(role, PackageName, Brackets(TypeName), Block),
+  RoutineDeclaration(sub, RoutineName, Parens(TypeName, VariableName, TypeName, TypeName), Block),
+  RoutineDeclaration(method, RoutineName, Parens(TypeName, VariableName), Block(TypeName)),
+  PackageDeclaration(class, "::", Block))
+
 # Constants with a sigil
 
 my constant $Z = 3;

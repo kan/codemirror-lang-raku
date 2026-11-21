@@ -157,7 +157,10 @@ export const rakuCompletionSource: CompletionSource = context => {
         declaresVariable(state, node.parent!, prev.prevSibling)) return null
     // `$x .= trim` calls a method.
     let afterDotAssign = prev != null && prev.name == "Operator" && state.sliceDoc(prev.from, prev.to) == ".="
-    return {from: node.from, options: afterDotAssign ? localMethods() : localGlobals(), validFor: nameTail}
+    // The colons of a type capture, ::T, and of ::?CLASS are not part of the name.
+    let colons = /^::\??/.exec(state.sliceDoc(node.from, node.from + 3))
+    return {from: node.from + (colons ? colons[0].length : 0), options: afterDotAssign ? localMethods() : localGlobals(),
+            validFor: nameTail}
   }
 
   // Other names (pair keys, names being declared) are made up by the

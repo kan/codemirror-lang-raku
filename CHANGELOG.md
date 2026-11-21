@@ -64,6 +64,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in strings, as `$0` and `$/` are. It used to be a sigil and a
   subscript, which in a string were highlighted as its text. A name of
   more than 20 characters still is.
+- `ff`, `fff`, `before`, `after`, `unicmp`, `coll` and `minmax` are
+  operators where an operator is expected, as `x` and `min` are, and so
+  are the meta operators on word operators: `Zmin`, `Xeq`, `Rcmp`. They
+  used to be names, and the meta operators types.
+- The word operators and the set operators are operators after a
+  subscript in braces, or a block, on the same line: `%h{$k} x 3`,
+  `{ rand } xx 3`, `%h{$k} (elem) $s`.
+- `$%h` and `@%h` are a hash in a container, not a modulo.
+- A type capture (`::T`, as in `role R[::T]`) and the types of the
+  current package (`::?CLASS`, `::?ROLE`) are type names, and `$::x`
+  is a variable. A `::` that no name follows, as in `::('Foo')` and
+  `PROCESS::<$OUT>`, is one token, and `::=` is one operator. They used
+  to be split into colons and pair keys.
+- A `:sym<…>` that holds brackets with a space between them belongs to
+  the name of a regex declaration, as in `token infix:sym<{ }> { … }`.
+  The brackets used to be read as the body of the declaration, and the
+  body as code.
+- The import list after the version or the author of a module is a
+  word list: `use Foo:ver<1>:auth<zef:me> <a b>`.
+- A byte order mark at the start of a file is whitespace, not an error.
 
 ### Performance
 

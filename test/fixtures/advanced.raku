@@ -45,6 +45,11 @@ grammar Line {
     rule pair { <key=.ident> '=' <value> { make $<key>.Str => $<value>.made } }
     regex value { \S+ | "{" .*? "}" }
     token op:sym<eq> { '==' }
+    token op:sym<{ }> { '{' <-[}]>* '}' }
+}
+
+role Tagged[::T] {
+    method tag(::?CLASS:D: T $value) { ::?ROLE.^name ~ $value }
 }
 
 class Actions {
@@ -145,6 +150,10 @@ say "$hex.raku.subst(/ "(" .* /)".trim, <a \> b>, «c \» $n»;
 say "home: %*ENV<HOME>, first: @*ARGS[0], in &?ROUTINE.name()", "%.2f of @!a";
 say "$<name> is $<name>.chars() long" if 'raku' ~~ / $<name>=[\w+] /;
 say @<names>.elems, $<a_capture_with_a_long_name and_another>;
+
+# Word operators after a subscript, and meta operators on them.
+say %count{$key} x 2, %count{'two'} min 3, 'a' before 'b', @words Zmin @words, $%count, $::key;
+say ::('Log::Parse::Line').^name, PROCESS::<$OUT>.^name;
 
 =finish
 

@@ -51,6 +51,26 @@ use Foo::Bar; need Baz; import Qux; require Quux; no strict;
 Program(use, TypeName, need, TypeName, import, TypeName, require, TypeName,
   no, Identifier)
 
+# An import list after the version and the author of a module
+
+use Foo:ver<1>:auth<zef:me> <a b>;
+use Bar:ver<2> 'c';
+say %h<a> < 3, :a<1> < 2;
+
+==>
+
+Program(use, TypeName, PairKey, StringLiteral, PairKey, StringLiteral, StringLiteral,
+  use, TypeName, PairKey, StringLiteral, StringLiteral,
+  Identifier, VariableName, StringLiteral, Operator, Number, PairKey, StringLiteral, Operator, Number)
+
+# A byte order mark at the start of a file
+
+﻿use v6;
+
+==>
+
+Program(use, Version)
+
 # Phasers
 
 BEGIN { } END { } CATCH { default { } }
