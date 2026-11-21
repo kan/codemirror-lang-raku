@@ -383,7 +383,8 @@ describe("incremental parsing", () => {
   // text stays where a full parse reads code. Few of the openers do
   // this, and which ones depends on where the runs end: pick another one
   // when heredocs.raku changes (see AGENTS.md). It takes a change to
-  // @lezer/common. When the tokens no longer differ, this case can check
+  // @lezer/common (https://code.haverbeke.berlin/lezer/lezer/issues/79).
+  // When the tokens no longer differ, this case can check
   // that they are the same.
   it("keeps the text of a heredoc whose opener an edit took away (issue 29)", () => {
     let parser = rakuLanguage.parser
