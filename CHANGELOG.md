@@ -21,9 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   divide.
 - `=:=` is one operator.
 - Characters that are no token, such as full-width digits (`say ４２;`),
-  letterlike symbols (`ℝℝ`, `ℵ₀`) or backticks (`` 1 ``` 2 ``), no longer
-  turn the code after them, up to the next blank line, into Pod. They are
-  errors, and the code after them is read as code.
+  letterlike symbols that are no letters (`℃℃`, `№`) or backticks
+  (`` 1 ``` 2 ``), no longer turn the code after them, up to the next
+  blank line, into Pod. They are errors, and the code after them is read
+  as code.
 - After an edit, what follows a prefix `++` or `--` could be read
   differently than in a parse from scratch: the name in `++x` could
   become an operator.
@@ -45,6 +46,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `s:3x/a/b/`, start a regex.
 - `∞` is a number and `∅` a term, so the `/` after them divides:
   `∞ / 2`, `-∞..∞`.
+- The letters among the letterlike symbols, the superscripts and the
+  subscripts, and a few others, start a name: `my constant \ℝ = 1`,
+  `ℵ`, `Ω`, `ⁿ`, `々`. They used to be errors.
+- A number that is one character is a `Number`, as `½` was: the Roman
+  numerals (`Ⅻ`, `ⅰ`), the subscripts (`₀`), the circled numbers (`①`,
+  `⑴`, `❶`, `㉑`, `㊀`) and the ideographic numbers (`〇`, `〡`). The `/`
+  after them divides. They used to be errors, operators (`①`) or names
+  (`㉑`).
 - A `++` or `--` at the start of a line after a block is a prefix: in
   `if 1 { }` followed by `++x;`, `x` is no longer read as an operator.
 - A chain of method calls in a string that ends in an argument list is
