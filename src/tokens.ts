@@ -466,7 +466,13 @@ export const trackContext = new ContextTracker<Context>({
     // The text of a heredoc that interpolates is read by a parser of
     // its own, as a quote without delimiters.
     if (term == heredocStart) return context.withQuote(Mode.Term, heredocQuote)
-    if (term == podStart) return context.withPod(readPodStart(input))
+    // Error recovery can insert a podStart of no length where there is
+    // no directive. That starts no block, or the text up to the next
+    // blank line would become Pod.
+    if (term == podStart) {
+      let end = podDirectiveEnd(input)
+      return end > 0 ? context.withPod(readPodStart(input, end)) : context
+    }
     if (term == podEnd || term == podEndDirective) return context.withPod(null)
     if (skippedTerms.has(term)) return context
     let {regex} = context
@@ -663,12 +669,13 @@ function podNameEnd(input: InputStream, end: number) {
   return name < 0 ? end : name
 }
 
-// The block that the directive at the current position starts.
+// The block that the directive at the current position, which ends at
+// offset `end`, starts.
 //   =begin name ... =end name   delimited, can hold blocks of other names
 //   =finish                     the rest of the file
 //   =for name, =head1, ...      up to the next blank line
-function readPodStart(input: InputStream) {
-  let end = podDirectiveEnd(input), directive = word(input, 1, end)
+function readPodStart(input: InputStream, end: number) {
+  let directive = word(input, 1, end)
   if (directive == "finish") return new PodBlock(PodKind.Finish, "", false)
   let nameStart = blanksEnd(input, end), name = word(input, nameStart, Math.max(nameStart, nameEnd(input, nameStart)))
   if (directive == "begin") return new PodBlock(PodKind.Delimited, name, podCodeBlock.test(name))

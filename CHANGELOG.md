@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Bug fixes
+
+- Characters that are no token, such as full-width digits (`say ４２;`),
+  letterlike symbols (`ℝℝ`, `ℵ₀`) or backticks (`` 1 ``` 2 ``), no longer
+  turn the code after them, up to the next blank line, into Pod. They are
+  errors, and the code after them is read as code.
+
 ## [0.4.1] - 2026-11-10
 
 ### Internal
