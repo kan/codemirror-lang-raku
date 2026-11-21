@@ -126,6 +126,39 @@ $a ⚛+= 1; ⚛$a; 1 ⚡ 2; ¬$x; 3 ⩵ 3
 Program(VariableName, Operator, Number, Operator, VariableName, Number, Operator, Number, Operator, VariableName,
   Number, Operator, Number)
 
+# Infinity and the empty set are terms
+
+my $x = ∞ / 2; say 1 / 3; say -∞..∞; say ∅ / 1; say -∅ / 2; 1 / 2
+
+==>
+
+Program(my, VariableName, Operator, Number, Operator, Number, Identifier, Number, Operator, Number,
+  Identifier, Operator, Number, Operator, Number, Identifier, Operator, Operator, Number,
+  Identifier, Operator, Operator, Operator, Number, Number, Operator, Number)
+
+# A reduction with division
+
+say [/] 8, 2; say 6 / 2; my @r = [/]/, 1];
+
+==>
+
+Program(Identifier, Brackets(Operator), Number, Number, Identifier, Number, Operator, Number,
+  my, VariableName, Operator, Brackets(Regex, Number))
+
+# A prefix increment at the start of a line after a block
+
+if 1 { }
+++x;
+if 1 { }
+  --$y / 2; say 3 / 4;
+%h{a}++ / 2; 3 / 4
+
+==>
+
+Program(if, Number, Block, Operator, Identifier,
+  if, Number, Block, Operator, VariableName, Operator, Number, Identifier, Number, Operator, Number,
+  VariableName, Block(Identifier), Operator, Operator, Number, Number, Operator, Number)
+
 # Set operators in parentheses
 
 $a (<=) $b, @x (elem) $s, <a b> (<) <a b c>.Set, f(-) , ($a) (|) ($b)

@@ -31,6 +31,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   such edits, 3 of them, down from 18. Which edits do it has changed, so
   a few that used to be read right now are not. See Known limitations in
   the README.
+- A sigilless name that is spelled like a declarator, as in
+  `sub f(\role, \class) { role.say }`, no longer makes a declaration that
+  runs on past the signature. A lowercase word after a backslash is a
+  name, and so is a declarator that a method is called on.
+- After a character that is no token, the next word is no longer taken
+  for the name of the declaration: in `class ４２ is Foo { }`, `is` is
+  not a `PackageName`.
+- `[/]` is a reduction: in `say [/] 8, 2; say 6 / 2;`, the code between
+  the slashes is no longer a regex.
+- Regex adverbs that start with a count, as in `m:2nd/x y/`, `m:1st/a/`
+  and `s:3x/a/b/`, start a regex.
+- `∞` is a number and `∅` a term, so the `/` after them divides:
+  `∞ / 2`, `-∞..∞`.
+- A `++` or `--` at the start of a line after a block is a prefix: in
+  `if 1 { }` followed by `++x;`, `x` is no longer read as an operator.
 - Completion offers the variables that are declared with a native type
   or a coercion type, as in `my int @a`, `my num $n` and
   `my Foo(Str) $x`, and offers nothing for the variable that such a

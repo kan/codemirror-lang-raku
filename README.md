@@ -95,7 +95,7 @@ on incomplete code.
 | `Identifier`, `TypeName` | A bare name (`say`, `my-sub`), and a capitalized one (`Int`, `Foo::Bar`), with its smiley if it has one (`Int:D`) |
 | `MethodCall` | The `.` and the `MethodName` of `.name`, `.?name` and the like. The arguments are the `Parens` after it |
 | `PairKey` | `:key`, `:!key`. The value is the node after it |
-| `Number`, `Version` | `42`, `1.5e3`, `0x1F`, `:16<FF>`, `½`, and `v6.d` |
+| `Number`, `Version` | `42`, `1.5e3`, `0x1F`, `:16<FF>`, `½`, `∞`, and `v6.d` |
 | `True`, `False`, `Nil` | These three words |
 | `Operator` | An operator made of symbols, a word operator where an operator is expected (`x`, `min`, `Z+`), a set operator in parentheses (`(elem)`) |
 | `StringLiteral` | A quote of any kind. One that interpolates has `Escape`, `Interpolation`, variable, `Brackets`, `Parens` and `MethodCall` children, and a `NestedDelimiters` for each pair of its own delimiters in it (the `[b]` of `qq[a [b] c]`) |
@@ -208,7 +208,8 @@ Heuristics that can be wrong:
   `[ ]`, indentation follows the brackets only.
 - A capitalized word is taken to be a type name.
 - A symbol outside of ASCII is taken to be an operator, whatever it was
-  declared as.
+  declared as. The built-in terms `∞` and `∅` are not: `∞` is a number,
+  and `∅` is followed by an operator.
 - A set operator in parentheses, such as `(elem)` or `(<=)`, is an
   operator after a term and a space: `$a (elem) $b`. Right after the
   term, the parentheses hold arguments: `$f(elem)`.
@@ -257,11 +258,13 @@ Heuristics that can be wrong:
   characters of whitespace is not seen, and a call such as `only foo(1)`, of a
   routine of your own that is named `only`, is read as a declaration.
 - A word spelled like a keyword is a keyword wherever it appears, except
-  as a method name, as a declared name, before `=>`, and for the
-  keywords that are routines (`take`, `return`, `next`, `not`, …) right
-  before a `(`: `take(1)`. A sigilless variable or a routine of your own
-  that is named like a keyword is highlighted as one, and a declarator
-  that is called, as in `method($n)`, starts a declaration.
+  as a method name, as a declared name, before `=>`, after a backslash
+  (`sub f(\class)`), for a declarator that a method is called on
+  (`class.say`), and for the keywords that are routines (`take`,
+  `return`, `next`, `not`, …) right before a `(`: `take(1)`. Elsewhere, a
+  sigilless variable or a routine of your own that is named like a
+  keyword is highlighted as one, and one that is named like a
+  declarator, as in `say role` or `method($n)`, starts a declaration.
 - In a regex, a curly quote or a corner quote opens a quote, as Raku
   has it. A lone one, as in `/‘/`, takes the text up to the next
   closing quote on its line.

@@ -451,7 +451,7 @@ describe("incremental parsing", () => {
   it("reads what follows a reused increment the same after an edit", function() {
     this.timeout(20000)
     let parser = rakuLanguage.parser
-    for (let line of ["my \\x = 1; ++x; --x;\n", "$y++ + ++x; - --x; $y++ ++ x;\n"]) {
+    for (let line of ["my \\x = 1; ++x; --x;\n", "$y++ + ++x; - --x; $y++ ++ x;\n", "if 1 { }\n++x; --$y / 2;\n"]) {
       let doc = line.repeat(400)
       for (let at = 0; at < doc.length; at += 211) {
         let changed = doc.slice(0, at) + " " + doc.slice(at)

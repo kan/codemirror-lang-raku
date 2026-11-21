@@ -297,7 +297,9 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
     "0" $[bB] $[01_]+ |
     "0" $[dD] $[0-9_]+ |
     // A fraction that is one character: ½, ⅔
-    $[\u{bc}-\u{be}\u{2150}-\u{215f}\u{2189}]
+    $[\u{bc}-\u{be}\u{2150}-\u{215f}\u{2189}] |
+    // Infinity, which operator runs leave out: -∞..∞
+    "∞"
   }
 
   // :16<FF>
@@ -309,12 +311,13 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
   // ÷ … ∘ ⚛ and the like. An operator of one's own is usually made of
   // such symbols (infix:<⚡>), and is not known where it is used. The
   // ranges leave out the quotes (‘ ’ “ ” ‚ „), the spaces, the
-  // superscripts and the fractions. Keep them in sync with
-  // isOperatorRunChar in tokens.ts, which cuts a run of these short
-  // before a term: the `=` of `@a=<a b>`.
+  // superscripts, the fractions, the infinity (∞), which is a number,
+  // and the empty set (∅), which termToken reads alone. Keep them in
+  // sync with isOperatorRunChar in tokens.ts, which cuts a run of these
+  // short before a term: the `=` of `@a=<a b>`.
   operatorChar {
     $[+\-*/~^|<>=!?\\\u{a1}-\u{a9}\u{ab}\u{ac}\u{ae}-\u{b1}\u{b4}\u{b6}-\u{b8}\u{bb}\u{bf}\u{d7}\u{f7}]
-    | $[\u{2010}-\u{2017}\u{2020}-\u{2027}\u{2030}-\u{205e}\u{2190}-\u{2bff}]
+    | $[\u{2010}-\u{2017}\u{2020}-\u{2027}\u{2030}-\u{205e}\u{2190}-\u{2204}\u{2206}-\u{221d}\u{221f}-\u{2bff}]
   }
   Operator {
     operatorChar+ |

@@ -130,6 +130,14 @@ my &plus = &infix:<+++>;
 say q:c[sum: { plus(1, 2) } costs $5.00 \] ], qq:!c{ a {literal} block, $n times };
 say q:s:b"$hex\t@not-an-array", Q:closure<{ $n * 2 } is not $half>, qq:!s:!b[10$ \n];
 
+# Sigilless names that are spelled like declarators, symbols that are
+# terms, a reduction with division, and adverbs that start with a count.
+sub ratio(\role, \class) { role.say; class.^name; [/] role.Int, class.Int }
+say ∞ / 2, -∞..∞, ∅ / 1, 1 / 3;
+say $hex ~~ m:2nd/x y/, 1 / 2;
+if $n { }
+++$n;
+
 =finish
 
 Anything after =finish is documentation: { ' " /

@@ -118,7 +118,7 @@ function isOperatorRunChar(ch: number) {
   return ch >= 0xa1 && ch <= 0xa9 || ch == 0xab || ch == 0xac || ch >= 0xae && ch <= 0xb1 || ch == 0xb4 ||
     ch >= 0xb6 && ch <= 0xb8 || ch == 0xbb || ch == 0xbf || ch == 0xd7 || ch == 0xf7 ||
     ch >= 0x2010 && ch <= 0x2017 || ch >= 0x2020 && ch <= 0x2027 || ch >= 0x2030 && ch <= 0x205e ||
-    ch >= 0x2190 && ch <= 0x2bff
+    ch >= 0x2190 && ch <= 0x2bff && ch != 0x2205 /* ∅ */ && ch != 0x221e /* ∞ */
 }
 
 // Whether the character at offset `pos` would continue a name that ends
@@ -329,18 +329,22 @@ for (let term of [quoteContent, quoteNestOpen, quoteNestClose, NestedDelimiters,
   termModes.set(term, Mode.Term)
 for (let term of [multi, proto, only]) termModes.set(term, Mode.AfterMulti)
 
-// The mode after an operator, from its first three characters. `after`
-// is the mode before it.
-function modeAfterOperator(first: number, second: number, third: number, after: Mode) {
+// The mode after the operator at offset `offset`, from its first three
+// characters. `after` is the mode before it.
+function modeAfterOperator(input: InputStream, offset: number, first: number, second: number, third: number,
+                           after: Mode) {
   // A lone `*` is as often the whatever star as a multiplication.
   if (first == Ch.Star && !isOperatorChar(second)) return Mode.AfterName
   // A power in superscript, $x², leaves the term complete. These are
   // the characters that the grammar's Operator token takes for one.
-  if (first == 0xb2 || first == 0xb3 || first == 0xb9 || first == 0x2070 || first >= 0x2074 && first <= 0x207b)
+  // So does the empty set, ∅, which is a term.
+  if (first == 0xb2 || first == 0xb3 || first == 0xb9 || first == 0x2070 || first >= 0x2074 && first <= 0x207b ||
+      first == 0x2205 && second < 0)
     return Mode.AfterTerm
-  // Postfix increment and decrement leave the term complete.
+  // Postfix increment and decrement leave the term complete. After a
+  // block, only on its line: the statement ends at the line break.
   if ((first == Ch.Plus || first == Ch.Hyphen) && second == first && !isOperatorChar(third) &&
-      (after == Mode.AfterTerm || after == Mode.AfterBlock)) return Mode.AfterTerm
+      (after == Mode.AfterTerm || after == Mode.AfterBlock && !atLineStart(input, offset))) return Mode.AfterTerm
   return Mode.Term
 }
 
@@ -375,7 +379,8 @@ function modeAfter(term: number, input: InputStream, offset: number, before: Mod
   if (mode != null) return mode
   let first = input.peek(offset)
   if (term == Operator || term == wordOperator)
-    return modeAfterOperator(first, size > 1 ? input.peek(offset + 1) : -1, size > 2 ? input.peek(offset + 2) : -1, before)
+    return modeAfterOperator(input, offset, first, size > 1 ? input.peek(offset + 1) : -1,
+                             size > 2 ? input.peek(offset + 2) : -1, before)
   return modeAfterChar(first)
 }
 
@@ -668,9 +673,9 @@ function gapEnd(input: InputStream, pos: number, lines = false) {
   return pos
 }
 
-// Whether only blanks separate the current position from the start of its line.
-function atLineStart(input: InputStream) {
-  for (let i = -1;; i--) {
+// Whether only blanks separate offset `pos` from the start of its line.
+function atLineStart(input: InputStream, pos = 0) {
+  for (let i = pos - 1;; i--) {
     let ch = input.peek(i)
     if (ch == Ch.Newline || ch < 0) return true
     if (!isBlank(ch)) return false
@@ -924,10 +929,15 @@ function readOpening(input: InputStream, at = 0): Opening | null {
   // Whether a backslash escapes the delimiter, apart from the escapes
   // of :b. That comes with q and its :q adverb: Q and qq:!b have none.
   let escapes = isQuote ? kind == "raw" && next == Ch.q : true
-  while (input.peek(pos) == Ch.Colon && (isAsciiLetter(input.peek(pos + 1)) || input.peek(pos + 1) == Ch.Bang)) {
+  for (;;) {
+    if (input.peek(pos) != Ch.Colon) break
+    // An adverb can start with its count: m:2nd/a/, s:3x/a/b/
+    let letter = pos + 1
+    while (isDigit(input.peek(letter))) letter++
+    if (!isAsciiLetter(input.peek(letter)) && !(letter == pos + 1 && input.peek(letter) == Ch.Bang)) break
     adverbs = true
     let negated = input.peek(pos + 1) == Ch.Bang, adverbStart = pos + (negated ? 2 : 1)
-    pos += 2
+    pos = letter + 1
     while (isAsciiLetter(input.peek(pos)) || isDigit(input.peek(pos))) pos++
     let adverb = word(input, adverbStart, pos)
     // An argument that is False or 0 switches the adverb off: q:c(False)
@@ -1268,6 +1278,9 @@ const callableKeywords = /^(take|return|emit|next|last|redo|proceed|succeed|so|n
 // The words that declare what follows `multi`, `proto` or `only`.
 const declarators = /^(sub|method|submethod|token|rule|regex)$/
 
+// The words that start a declaration node of the grammar.
+const allDeclarators = /^(class|role|grammar|module|package|sub|method|submethod|token|rule|regex|enum|subset|constant)$/
+
 // Whether a declarator starts with the given word, as `su` starts `sub`.
 function startsDeclarator(name: string) {
   return ["sub", "method", "submethod", "token", "rule", "regex"].some(declarator => declarator.startsWith(name))
@@ -1368,9 +1381,13 @@ export const termToken = new ExternalTokenizer((input, stack) => {
       while (isOperatorChar(input.peek(pos))) pos++
       return input.acceptToken(wordOperator, pos)
     }
-    // A word before `=>` is a key, whatever it spells.
-    let end = nameEnd(input, 0), after = gapEnd(input, end)
-    if (input.peek(after) == Ch.Equals && input.peek(after + 1) == Ch.Greater)
+    // A word before `=>` is a key, whatever it spells. A word after a
+    // backslash is a sigilless name, and so is a declarator that a
+    // method is called on: sub f(\class) { class.say }
+    // A capitalized one is left to be a TypeName, as it is where it is used.
+    let end = nameEnd(input, 0), after = gapEnd(input, end), lower = next < Ch.A || next > Ch.Z
+    if (input.peek(after) == Ch.Equals && input.peek(after + 1) == Ch.Greater || lower && input.peek(-1) == Ch.Backslash ||
+        input.peek(end) == Ch.Dot && end <= 9 && methodDotSize(input, end) > 0 && allDeclarators.test(word(input, 0, end)))
       return input.acceptToken(plainName, end)
     // After `multi`, `proto` or `only`, a name that is not a declarator
     // is that of a sub: multi foo($x) { }
@@ -1447,10 +1464,16 @@ export const termToken = new ExternalTokenizer((input, stack) => {
       hasBalancedBraces(input, opening.start, end)
     return input.acceptToken(interpolates ? interpolatingWordList : rawString, end)
   } else if (next == Ch.Slash) {
-    let end = input.peek(1) != Ch.Slash && inTermPosition(input, mode, 1) ? regexTokenEnd(input, slashOpening) : -1
+    // [/] is a reduction, as [<] is. [/]/] holds the regex /]/.
+    let reduction = input.peek(-1) == Ch.BracketOpen && input.peek(1) == Ch.BracketClose && input.peek(2) != Ch.Slash
+    let end = input.peek(1) != Ch.Slash && !reduction && inTermPosition(input, mode, 1) ?
+      regexTokenEnd(input, slashOpening) : -1
     return end > 0 ? input.acceptToken(regexLiteral, end) : operatorHead(input, mode)
   } else if (isOperatorRunChar(next)) {
     return operatorHead(input, mode)
+  } else if (next == 0x2205 /* ∅ */) {
+    // The empty set is a term, which operator runs leave out: -∅
+    return input.acceptToken(wordOperator, 1)
   }
 
   let opening = readOpening(input)
@@ -1771,16 +1794,23 @@ export const regexToken = new ExternalTokenizer((input, stack) => {
 
 // ---- Names ----
 
+// The length of the method dot at offset `pos`, with its modifier, or
+// zero when no name follows it there.
+function methodDotSize(input: InputStream, pos: number) {
+  if (input.peek(pos) != Ch.Dot) return 0
+  let size = 1, next = input.peek(pos + 1)
+  if (next == Ch.Question || next == Ch.Plus || next == Ch.Star || next == Ch.Caret || next == Ch.Amp)
+    next = input.peek(pos + ++size)
+  return isIdentifierStart(next) ? size : 0
+}
+
 // The dot of a method call, with its optional `?`, `+`, `*`, `^` or `&`
 // modifier. It is only produced when a name follows. In a string, a
 // method call is only interpolated after a variable, and when it has
 // an argument list: "$x.foo()"
 export const methodDotToken = new ExternalTokenizer((input, stack) => {
-  if (input.next != Ch.Dot) return
-  let size = 1, next = input.peek(1)
-  if (next == Ch.Question || next == Ch.Plus || next == Ch.Star || next == Ch.Caret || next == Ch.Amp)
-    next = input.peek(++size)
-  if (!isIdentifierStart(next)) return
+  let size = methodDotSize(input, 0)
+  if (!size) return
   if (context(stack).quote && inQuoteText(stack) &&
       (!afterQuotedVariable(stack) || input.peek(nameEnd(input, size)) != Ch.ParenOpen)) return
   input.acceptToken(methodDot, size)
@@ -1861,9 +1891,25 @@ export const nameToken = new ExternalTokenizer((input, stack) => {
       if (symEnd > sym) end = symEnd
     }
   }
+  // The name follows the declarator. After a character that is no
+  // token, error recovery would take the next word for it: the `is` of
+  // `class ４２ is Foo`.
+  if (!afterWord(input)) return
   if (!mark && stack.canShift(declaredName)) input.acceptToken(declaredName, end)
   else if (stack.canShift(declaredMethodName)) input.acceptToken(declaredMethodName, end)
 })
+
+// Whether the last character before the current position, leaving out
+// whitespace, ends a word, or may end a comment: a `#` comes before it
+// on its line, as in `class #`(c) Foo`.
+function afterWord(input: InputStream) {
+  let pos = -1
+  while (isSpace(input.peek(pos))) pos--
+  let ch = input.peek(pos)
+  if (isIdentifierStart(ch) || isDigit(ch)) return true
+  for (; ch >= 0 && ch != Ch.Newline; ch = input.peek(--pos)) if (ch == Ch.Hash) return true
+  return false
+}
 
 // The type smiley in Int:D, Str:U and Any:_. It has to touch the type
 // name, and must not be the start of a longer pair such as :Default.

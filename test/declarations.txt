@@ -271,3 +271,17 @@ Program(
   ConstantDeclaration(constant, ConstantName), Operator, Block(Number),
   ConstantDeclaration(constant, ConstantName), Operator, VariableName,
   ConstantDeclaration(constant), Operator, Identifier, Operator, Number)
+
+# A sigilless name that is spelled like a declarator declares nothing
+
+sub f(\role, \class, \token, \sub) { role.say; class.^name }
+my \method = 1; constant \grammar = 2;
+
+==>
+
+Program(
+  RoutineDeclaration(sub, RoutineName,
+    Parens(Operator, Identifier, Operator, Identifier, Operator, Identifier, Operator, Identifier),
+    Block(Identifier, MethodCall(MethodName), Identifier, MethodCall(MethodName))),
+  my, Operator, Identifier, Operator, Number,
+  ConstantDeclaration(constant), Operator, Identifier, Operator, Number)
