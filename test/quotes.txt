@@ -655,3 +655,36 @@ Q♥a♥, qx`echo`, q•b•, 1
 ==>
 
 Program(StringLiteral, StringLiteral, StringLiteral, Number)
+
+# A word list right after an operator
+
+my @a=<a b c>; foo |<a b>; say +<a b c>; say !<a b>; say ~<a>; <1 2>|<2 1>; :k=><a b>
+
+==>
+
+Program(my, VariableName, Operator, StringLiteral,
+  Identifier, Operator, StringLiteral,
+  Identifier, Operator, StringLiteral,
+  Identifier, Operator, StringLiteral,
+  Identifier, Operator, StringLiteral,
+  StringLiteral, Operator, StringLiteral,
+  PairKey, Operator, StringLiteral)
+
+# A word list with double angles right after an operator
+
+my @a=«a b»; my @b=<<a $x>>; $h{$k}=«c d»; $a==<<a b>>
+
+==>
+
+Program(my, VariableName, Operator, StringLiteral,
+  my, VariableName, Operator, StringLiteral(VariableName),
+  VariableName, Block(VariableName), Operator, StringLiteral,
+  VariableName, Operator, StringLiteral)
+
+# A subscript on the whatever star
+
+map(*<k>), map(*<5)
+
+==>
+
+Program(Identifier, Parens(Operator, StringLiteral), Identifier, Parens(Operator, Number))

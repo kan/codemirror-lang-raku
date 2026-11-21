@@ -208,6 +208,25 @@ describe("identifier characters", () => {
   })
 })
 
+// The grammar reads a run of operator characters as one Operator, and
+// termToken cuts a run short before a term in it. Both have to agree
+// on what the characters are.
+describe("operator characters", () => {
+  it("are the same in the grammar and in the tokenizers", function() {
+    this.timeout(10000)
+    let mismatched = []
+    // The end of the operator that starts after `$a`.
+    let end = text => rakuLanguage.parser.parse(text).resolve(2, 1).to
+    // The ranges of both end before U+3000.
+    for (let code = 33; code < 0x3000; code++) {
+      let ch = String.fromCharCode(code)
+      // When nothing follows the character, and when a regex does.
+      if (end("$a=" + ch + " ") != end("$a=" + ch + "/x/")) mismatched.push("U+" + code.toString(16))
+    }
+    assert.deepStrictEqual(mismatched, [])
+  })
+})
+
 describe("fixtures", () => {
   let dir = path.join(caseDir, "fixtures")
   for (let file of fs.readdirSync(dir)) {

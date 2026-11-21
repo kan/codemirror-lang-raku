@@ -378,3 +378,23 @@ ok 2 > 1;
 
 Program(Identifier, StringLiteral, Operator, Regex(Escape, Assertion), StringLiteral,
   Identifier, Number, Operator, Number)
+
+# A regex right after an operator
+
+my $r=/x y/; $str ~~/^\d+$/; say !/x/; $s !~~/a/; $a/=/x/
+
+==>
+
+Program(my, VariableName, Operator, Regex,
+  VariableName, Operator, Regex(Operator, Escape, Operator, Operator),
+  Identifier, Operator, Regex,
+  VariableName, Operator, Regex,
+  VariableName, Operator, Regex)
+
+# A quote in a regex right after an operator does not turn the code after it into a string
+
+my $r=/"a"/; say "x";
+
+==>
+
+Program(my, VariableName, Operator, Regex(StringLiteral), Identifier, StringLiteral)

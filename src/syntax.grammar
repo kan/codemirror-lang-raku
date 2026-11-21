@@ -306,7 +306,9 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
   // ÷ … ∘ ⚛ and the like. An operator of one's own is usually made of
   // such symbols (infix:<⚡>), and is not known where it is used. The
   // ranges leave out the quotes (‘ ’ “ ” ‚ „), the spaces, the
-  // superscripts and the fractions.
+  // superscripts and the fractions. Keep them in sync with
+  // isOperatorRunChar in tokens.ts, which cuts a run of these short
+  // before a term: the `=` of `@a=<a b>`.
   operatorChar {
     $[+\-*/~^|<>=!?\\\u{a1}-\u{a9}\u{ab}\u{ac}\u{ae}-\u{b1}\u{b4}\u{b6}-\u{b8}\u{bb}\u{bf}\u{d7}\u{f7}]
     | $[\u{2010}-\u{2017}\u{2020}-\u{2027}\u{2030}-\u{205e}\u{2190}-\u{2bff}]
@@ -318,7 +320,7 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
     // `%` and `&` are also sigils. Keeping them out of operator runs lets
     // `*%opts` and `|&code` end in a variable.
     "%" "%"? "="? | "&" "&"? "="? |
-    ".." "."? "^"? | ".=" | "::"? ":="
+    ".." "."? "^"? | ".=" | "::"? ":=" | "=:="
   }
 
   "{" "}" "(" ")" "[" "]"

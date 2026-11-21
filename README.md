@@ -165,6 +165,17 @@ Not supported yet:
   name, also between hyper marks (`@a »plus« @b`). A term or a circumfix of one's own is not known: one that is
   a symbol is highlighted as an operator, and one that is a letter
   outside of the ranges for names, such as `ℵ`, is an error.
+- After a name and a space, `+<`, `~<` and `!<` with no space after them
+  are taken for a prefix and a word list, as in a call (`say +<a b>`),
+  also when the name is a sigilless variable (`first +<a b>`). With a
+  space after them, they are the infix (`first +< 64`). After a
+  variable, they are always the infix, as in Raku.
+- Double angles right after a prefix are taken for a hyper prefix
+  (`-<<@a`), so a word list there needs a space: `say + «a b»`, not
+  `say +«a b»`. After an infix with no space, they start a word list
+  only when the infix is one character or ends in `=` (`@a=«a b»`,
+  `$a==<<a b>>`), not after `~~`. A word list right after a hyper
+  operator (`@a»+«<a b>`) is read as part of the operator.
 - The `native` declarator, which NativeCall uses internally, does not
   make a declaration node.
 - Completion does not know types. After a `.` it offers the built-in

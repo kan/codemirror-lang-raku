@@ -93,4 +93,12 @@ try {
     }
 }
 
+# Terms right after an operator, with no space between them
+my @sizes=<small medium large>;
+my @more=«huge $size»;
+my $digits=/^\d+$/;
+if $size ~~/"medium"/ { say +<a b c>, |<d e> }
+say 'any' if $size eq <1 2>|<2 1>;
+say !/x/, $count+<2, @sizes>>~<<@more, -<<@stock;
+
 END { say 'done' }

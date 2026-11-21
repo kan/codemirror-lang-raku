@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Bug fixes
 
+- A word list or a regex right after an operator, with no space between
+  them, is no longer read as part of the operator: `my @a=<a b c>`,
+  `foo |<a b>`, `say +<a b c>`, `my @w=«a b»`, `<1 2>|<2 1>`,
+  `$s ~~/^\d+$/`, `say !/x/`. A quote in such a regex could turn the
+  rest of the document inside out. Operators that hold these characters
+  stay whole: `//=`, `<=>`, `<==`, `>>+<<`, `»+«`, `-<<`, and the shifts
+  and negations `+<`, `~<`, `!<` after a term.
+- `*<key>` is a subscript on the whatever star, and `$i++/2` and `*/2`
+  divide.
+- `=:=` is one operator.
 - Characters that are no token, such as full-width digits (`say ４２;`),
   letterlike symbols (`ℝℝ`, `ℵ₀`) or backticks (`` 1 ``` 2 ``), no longer
   turn the code after them, up to the next blank line, into Pod. They are
