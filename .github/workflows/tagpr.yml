@@ -34,7 +34,7 @@ jobs:
     # the same pull request as the subtree pull. A reusable workflow of another
     # repository is not pinned by actions.lock; test.yml checks this line with
     # scripts/tagpr/verify-subtree.mjs.
-    uses: kan/tagpr-scripts/.github/workflows/tagpr.yml@5798ef5c805057f28d47b7b518c2c1d067f55407
+    uses: kan/tagpr-scripts/.github/workflows/tagpr.yml@f95892b128286dd1f84eea57f1e08a17e1f26eb3
     # The most the shared workflow gets. All four are needed.
     permissions:
       contents: write       # push the release branch and the tag
