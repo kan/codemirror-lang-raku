@@ -146,3 +146,13 @@ Program(Identifier, Identifier, Version)
 ==>
 
 Program(Number, Operator, Number, VariableName, Operator, Number, Operator, Operator, Number, Number)
+
+# Numbers that are one character
+
+is Ⅼ, 1; Ⅻ / 2; ⅰ + ↈ; ① / ⑳; ⑴ ⒈ ⓪ ⓿ ❶ ➓; 〇 〡 〸 ㆒ ㈠ ㉑ ㊀ ㊿; ℵ₀ / 2; ₉ / 3
+
+==>
+
+Program(is, Number, Number, Number, Operator, Number, Number, Operator, Number,
+  Number, Operator, Number, Number, Number, Number, Number, Number, Number, Number, Number, Number,
+  Number, Number, Number, Number, Number, Identifier, Number, Operator, Number, Number, Operator, Number)

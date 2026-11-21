@@ -95,10 +95,29 @@ function isIdentifierStart(ch: number) {
   return isAsciiLetter(ch) || ch == Ch.Underscore ||
     ch == 0xaa || ch == 0xb5 || ch == 0xba ||
     ch >= 0xc0 && ch <= 0x1fff && ch != 0xd7 && ch != 0xf7 && ch != 0x1680 ||
+    ch >= 0x2071 && ch <= 0x2184 && isLetterAmongSymbols(ch) ||
     ch >= 0x2c00 && ch <= 0x2fef ||
-    ch >= 0x3040 && ch <= 0xdfff ||
+    ch >= 0x3005 && ch <= 0x303c && (ch <= 0x3006 || ch >= 0x302a && ch <= 0x3035 && ch != 0x3030 || ch >= 0x303b) ||
+    ch >= 0x3040 && ch <= 0xdfff && !isEnclosedCjkNumber(ch) ||
     ch >= 0xf900 && ch <= 0xfdff ||
+    ch >= 0xfe70 && ch <= 0xfefc ||
     ch >= 0xff21 && ch <= 0xff3a || ch >= 0xff41 && ch <= 0xff5a || ch >= 0xff66 && ch <= 0xffdc
+}
+
+// The letters among the superscripts, subscripts, letterlike symbols
+// and number forms: ⁿ ₐ ℂ ℝ ℵ ⅅ Ↄ.
+function isLetterAmongSymbols(ch: number) {
+  return ch == 0x2071 || ch == 0x207f || ch >= 0x2090 && ch <= 0x209c ||
+    ch == 0x2102 || ch == 0x2107 || ch >= 0x210a && ch <= 0x2113 || ch == 0x2115 ||
+    ch >= 0x2119 && ch <= 0x211d || ch == 0x2124 || ch == 0x2126 || ch == 0x2128 ||
+    ch >= 0x212a && ch <= 0x212d || ch >= 0x212f && ch <= 0x2139 || ch >= 0x213c && ch <= 0x213f ||
+    ch >= 0x2145 && ch <= 0x2149 || ch == 0x214e || ch == 0x2183 || ch == 0x2184
+}
+
+// The numbers in the CJK blocks, which the grammar's Number takes: ㆒ ㈠ ㉑ ㊀ ㊱
+function isEnclosedCjkNumber(ch: number) {
+  return ch >= 0x3192 && ch <= 0x3195 || ch >= 0x3220 && ch <= 0x3229 || ch >= 0x3248 && ch <= 0x324f ||
+    ch >= 0x3251 && ch <= 0x325f || ch >= 0x3280 && ch <= 0x3289 || ch >= 0x32b1 && ch <= 0x32bf
 }
 
 // The characters that Operator runs are made of in syntax.grammar,
@@ -119,7 +138,9 @@ function isOperatorRunChar(ch: number) {
   return ch >= 0xa1 && ch <= 0xa9 || ch == 0xab || ch == 0xac || ch >= 0xae && ch <= 0xb1 || ch == 0xb4 ||
     ch >= 0xb6 && ch <= 0xb8 || ch == 0xbb || ch == 0xbf || ch == 0xd7 || ch == 0xf7 ||
     ch >= 0x2010 && ch <= 0x2017 || ch >= 0x2020 && ch <= 0x2027 || ch >= 0x2030 && ch <= 0x205e ||
-    ch >= 0x2190 && ch <= 0x2bff && ch != 0x2205 /* ∅ */ && ch != 0x221e /* ∞ */
+    ch >= 0x2190 && ch <= 0x2bff && ch != 0x2205 /* ∅ */ && ch != 0x221e /* ∞ */ &&
+      // The circled numbers: ① ⑴ ⒈ ⓪ ❶
+      !(ch >= 0x2460 && ch <= 0x249b || ch >= 0x24ea && ch <= 0x24ff || ch >= 0x2776 && ch <= 0x2793)
 }
 
 // Whether the character at offset `pos` would continue a name that ends

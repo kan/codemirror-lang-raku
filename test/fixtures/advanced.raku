@@ -143,6 +143,11 @@ say $hex ~~ m:2nd/x y/, 1 / 2;
 if $n { }
 ++$n;
 
+# Names that start with a letterlike symbol, and numbers that are one
+# character.
+my constant \ℝ = Ⅻ / 2 + ① / 3;
+say ℝ.elems, ℵ₀ / 2, 〇 + ⅰ / ₉;
+
 # A chain of calls in a string, and an escaped delimiter in a word list.
 say "$hex.raku.subst(/ "(" .* /)".trim, <a \> b>, «c \» $n»;
 
