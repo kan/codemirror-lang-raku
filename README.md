@@ -139,7 +139,8 @@ Not supported yet:
   commenting out its line, the text of the heredoc can stay a heredoc
   instead of turning back into code. An edit in the text, or in the code
   shortly after it, makes it code again, as a parse from scratch reads
-  it. This takes a fix in `@lezer/common`.
+  it. This takes a fix in `@lezer/common`
+  ([lezer/lezer#79](https://code.haverbeke.berlin/lezer/lezer/issues/79)).
 - In Pod, a formatting code is one token: the codes inside it
   (`B<I<…>>`) are not told apart. Formatting codes are left alone in a
   block that is code (`=begin code`, `=code`, `=for code`), but not in a
