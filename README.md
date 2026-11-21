@@ -145,7 +145,8 @@ Not supported yet:
   block that is code (`=begin code`, `=code`, `=for code`), but not in a
   code block inside another block, nor in an indented code paragraph.
   Tables and the configuration after a directive (`:numbered`) are plain
-  text.
+  text. A block in a block of the same name (`=begin pod` in
+  `=begin pod`) does not nest: the first `=end pod` closes the outer one.
 - A `<<…>>` or `«…»` word list that holds `{ }`, `( )` or `;` can span up
   to 10 lines. A longer one is not taken to be a word list. Nothing is
   interpolated in a list that holds an unbalanced `{` or its own
@@ -250,6 +251,10 @@ Heuristics that can be wrong:
   routine or a sigilless variable of your own named `q`, before a block
   or a subscript, is misread. The
   regex words do not: `m {…}` and `s {…}` are calls.
+- In a string, a method call after a variable is interpolated when it
+  has an argument list, or when the calls chained to it end in one
+  within 24 characters: `"$x.a.b()"`, but not `"$x.a.b"`. For an `@`,
+  `%` or `&` variable, the 24 characters count from its sigil.
 - `%name` and `&name` are variables, except between two terms with no
   space on either side: `$a%b`.
 - After `multi`, `proto` or `only`, a name is taken to declare a sub when

@@ -46,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `∞ / 2`, `-∞..∞`.
 - A `++` or `--` at the start of a line after a block is a prefix: in
   `if 1 { }` followed by `++x;`, `x` is no longer read as an operator.
+- A chain of method calls in a string that ends in an argument list is
+  interpolated as a whole: `"$c.raku.subst(/ "(" .* /)"`. A quote in the
+  arguments no longer closes the string and turns the code after it
+  inside out.
+- A backslash in a word list keeps the delimiter after it from closing
+  the list: `<a \> b>`, `«a \» b»`, `<<a \>> b>>`.
 - Completion offers the variables that are declared with a native type
   or a coercion type, as in `my int @a`, `my num $n` and
   `my Foo(Str) $x`, and offers nothing for the variable that such a

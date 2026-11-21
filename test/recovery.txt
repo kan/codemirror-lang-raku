@@ -99,14 +99,14 @@ Program(RegexDeclaration(token, RegexName, Block(Regex(Operator, Operator, Asser
 # Word lists that hold brackets, a backslash or their own delimiter
 
 my @b = << ( [ { >>;
-my @e = «\»; say 1;
+my @e = «\\»; say 1;
 say <<a <<b>> c;
 say <<a }{ b>>, <<$x>>, «$y».elems;
 
 ==>
 
 Program(my, VariableName, Operator, StringLiteral,
-  my, VariableName, Operator, StringLiteral, Identifier, Number,
+  my, VariableName, Operator, StringLiteral(Escape), Identifier, Number,
   Identifier, StringLiteral, Identifier,
   Identifier, StringLiteral, StringLiteral(VariableName), StringLiteral(VariableName), MethodCall(MethodName))
 

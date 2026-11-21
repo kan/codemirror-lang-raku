@@ -189,6 +189,18 @@ Program(my, VariableName, Operator, StringLiteral,
   Identifier, StringLiteral,
   for, StringLiteral, Block)
 
+# An escaped closing delimiter in a word list
+
+my @a = <a \> b>; my @b = «a \» b»; my @c = <<a \>> b>>; my @d = <a \\>; 1 / 2
+
+==>
+
+Program(my, VariableName, Operator, StringLiteral,
+  my, VariableName, Operator, StringLiteral(Escape),
+  my, VariableName, Operator, StringLiteral(Escape),
+  my, VariableName, Operator, StringLiteral,
+  Number, Operator, Number)
+
 # Word lists with double angles
 
 <<a $b>>, «c d», (<e>, <f>)
@@ -605,6 +617,20 @@ Program(StringLiteral(
   VariableName, Brackets(Number), Brackets(Number),
   VariableName, MethodCall(MethodName), Parens,
   VariableName, MethodCall(MethodName), Parens(Number), MethodCall(MethodName), Parens))
+
+# A chain of method calls that ends in an argument list
+
+say "$c.raku.subst(/ "(" .* /)".trim; say "@a.sort.join(", ") $x.a.b and $y.c"; say "$x.a.Foo::b()"; 1 / 2
+
+==>
+
+Program(Identifier,
+  StringLiteral(VariableName, MethodCall(MethodName), MethodCall(MethodName), Parens(Regex(StringLiteral, Operator))),
+  MethodCall(MethodName),
+  Identifier, StringLiteral(VariableName, MethodCall(MethodName), MethodCall(MethodName), Parens(StringLiteral),
+    VariableName, VariableName),
+  Identifier, StringLiteral(VariableName, MethodCall(MethodName), MethodCall(MethodName), Parens),
+  Number, Operator, Number)
 
 # Sigils that do not interpolate
 
