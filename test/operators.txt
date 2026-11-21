@@ -295,6 +295,36 @@ Program(VariableName, Operator, VariableName, VariableName, Operator, VariableNa
   VariableName, Operator, VariableName, VariableName, Operator, VariableName,
   Operator, VariableName, Operator, VariableName)
 
+# A hyper comma stays whole, and does not open a word list
+
+@a »,« @b; f "»"; @a>>,<<@b; f ">>"; @a «,« @b; f "»"; @a <<,>> @b; @a»,«@b;
+my @x = «a b»,«c d»; f(<<a b>>,<<c d>>); say «a b», «c d»;
+@a Z»,« @b; f "»"; x »,« @b; f "»"
+
+==>
+
+Program(VariableName, Operator, VariableName, Identifier, StringLiteral,
+  VariableName, Operator, VariableName, Identifier, StringLiteral,
+  VariableName, Operator, VariableName, Identifier, StringLiteral,
+  VariableName, Operator, VariableName, VariableName, Operator, VariableName,
+  my, VariableName, Operator, StringLiteral, StringLiteral,
+  Identifier, Parens(StringLiteral, StringLiteral), Identifier, StringLiteral, StringLiteral,
+  VariableName, Operator, VariableName, Identifier, StringLiteral,
+  Identifier, Operator, VariableName, Identifier, StringLiteral)
+
+# A hyper operator after a whatever star does not open a word list
+
+my $d = * «+« 1; f "»"; my $e = * <<+<< 1; f ">>"; map * «~» "x", @a; * «a b»; map *«+«1, @a;
+$x * «-1 2»; $x * <<+1 -1>>; f "a"
+
+==>
+
+Program(my, VariableName, Operator, Operator, Operator, Number, Identifier, StringLiteral,
+  my, VariableName, Operator, Operator, Operator, Number, Identifier, StringLiteral,
+  Identifier, Operator, Operator, StringLiteral, VariableName,
+  Operator, StringLiteral, Identifier, Operator, Number, VariableName,
+  VariableName, Operator, StringLiteral, VariableName, Operator, StringLiteral, Identifier, StringLiteral)
+
 # Shifts and not-less-than stay whole after a term
 
 $a+<2; $a+>2; $a~<2; $a~>2; $a!<$b; $a!<=$b; $a+<=2; first +< 64; $x +<a b>

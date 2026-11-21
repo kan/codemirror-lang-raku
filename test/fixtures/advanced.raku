@@ -134,6 +134,12 @@ my $report = "Total: $n
 my &plus = &infix:<+++>;
 say q:c[sum: { plus(1, 2) } costs $5.00 \] ], qq:!c{ a {literal} block, $n times };
 say q:s:b"$hex\t@not-an-array", Q:closure<{ $n * 2 } is not $half>, qq:!s:!b[10$ \n];
+say Q :q [a \] bracket], qq :!s [{ $n } but not $half];
+
+# Hyper operators that hold a comma, or follow a whatever star, which
+# leave the quotes after them alone.
+my @pairs = @words »,« @words; say "»";
+my &twice = * «+« 1; say "»", @words <<,>> @words;
 
 # Sigilless names that are spelled like declarators, symbols that are
 # terms, a reduction with division, and adverbs that start with a count.

@@ -183,6 +183,10 @@ Not supported yet:
   also when the name is a sigilless variable (`first +<a b>`). With a
   space after them, they are the infix (`first +< 64`). After a
   variable, they are always the infix, as in Raku.
+- After a name and a space, double angles start a word list, also when
+  the name is a sigilless variable and they start a hyper infix
+  (`x «+« 1`). After a variable or a whatever star, they are the hyper
+  (`$x «+« 1`, `* «+« 1`).
 - Double angles right after a prefix are taken for a hyper prefix
   (`-<<@a`), so a word list there needs a space: `say + «a b»`, not
   `say +«a b»`. After an infix with no space, they start a word list
