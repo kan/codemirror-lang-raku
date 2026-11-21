@@ -134,6 +134,12 @@ my $report = "Total: $n
 my &plus = &infix:<+++>;
 say q:c[sum: { plus(1, 2) } costs $5.00 \] ], qq:!c{ a {literal} block, $n times };
 say q:s:b"$hex\t@not-an-array", Q:closure<{ $n * 2 } is not $half>, qq:!s:!b[10$ \n];
+say Q :q [a \] bracket], qq :!s [{ $n } but not $half];
+
+# Hyper operators that hold a comma, or follow a whatever star, which
+# leave the quotes after them alone.
+my @pairs = @words »,« @words; say "»";
+my &twice = * «+« 1; say "»", @words <<,>> @words;
 
 # Sigilless names that are spelled like declarators, symbols that are
 # terms, a reduction with division, and adverbs that start with a count.
@@ -142,6 +148,11 @@ say ∞ / 2, -∞..∞, ∅ / 1, 1 / 3;
 say $hex ~~ m:2nd/x y/, 1 / 2;
 if $n { }
 ++$n;
+
+# Names that start with a letterlike symbol, and numbers that are one
+# character.
+my constant \ℝ = Ⅻ / 2 + ① / 3;
+say ℝ.elems, ℵ₀ / 2, 〇 + ⅰ / ₉;
 
 # A chain of calls in a string, and an escaped delimiter in a word list.
 say "$hex.raku.subst(/ "(" .* /)".trim, <a \> b>, «c \» $n»;

@@ -224,9 +224,9 @@ say "after";
 
 Program(Identifier, ⚠, Identifier, StringLiteral)
 
-# Letterlike symbols in a row are not Pod
+# Letterlike symbols that are no letters, in a row, are not Pod
 
-my %h = ℝℝ => 1, ℵ₀ => 2;
+my %h = ℃℃ => 1, №℗ => 2;
 say "after";
 
 ==>
@@ -254,7 +254,7 @@ Program(RegexDeclaration(token, RegexName, ⚠, Block(Regex)), Identifier, Numbe
 # Unknown characters in place of the name of a declaration leave it without one
 
 class ４２ is Foo { }
-sub ℝℝ foo { }
+sub ℃℃ foo { }
 method 〃 bar { }
 class #`(c) Foo { }
 sub # helper (x)

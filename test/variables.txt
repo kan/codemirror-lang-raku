@@ -81,6 +81,17 @@ $naïve $λ $変数 café ｶﾅ µ ｆｏｏ
 Program(VariableName, VariableName, VariableName, Identifier, Identifier,
   Identifier, Identifier)
 
+# Names that start with a letterlike symbol or another letter among the symbols
+
+my constant \ℝ = 1; ℝ.elems; $ℵ; ℂ ℕ Ω ℓ ⅅ Ↄ ⁿ ₐ 々 〱〪 ﻼ
+
+==>
+
+Program(my, ConstantDeclaration(constant), Operator, Identifier, Operator, Number,
+  Identifier, MethodCall(MethodName), VariableName,
+  Identifier, Identifier, Identifier, Identifier, Identifier, Identifier, Identifier, Identifier, Identifier,
+  Identifier, Identifier)
+
 # Operators next to variables
 
 !$x; -$y; |@args; $a+$b

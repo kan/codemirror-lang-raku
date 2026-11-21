@@ -143,6 +143,20 @@ Program(StringLiteral, StringLiteral(VariableName), StringLiteral, StringLiteral
   Identifier, Parens(Identifier), Identifier, Block(Identifier), Identifier, Block(Identifier),
   Identifier, Block(Identifier))
 
+# A quote word with a space before its adverbs
+
+f Q :q [a \] b]; qq :!s [$x {1}]; q :c [a {1}]; Q :q:b/a\n/; s :g/a/b/; q :to/END/;
+text
+END
+say 1
+
+==>
+
+Program(Identifier, StringLiteral, ";", StringLiteral(Interpolation(Number)), ";",
+  StringLiteral(Interpolation(Number)), ";", StringLiteral(Escape), ";",
+  Identifier, PairKey, Operator, Identifier, Operator, Identifier, Operator, ";",
+  StringLiteral, ";", Heredoc, Identifier, Number)
+
 # Adverbs of a regex are not about interpolation
 
 m:s/a b/, s:g/a/b/, rx:i/a/, 1

@@ -95,7 +95,7 @@ on incomplete code.
 | `Identifier`, `TypeName` | A bare name (`say`, `my-sub`), and a capitalized one (`Int`, `Foo::Bar`, the type capture `::T`, `::?CLASS`), with its smiley if it has one (`Int:D`) |
 | `MethodCall` | The `.` and the `MethodName` of `.name`, `.?name` and the like. The arguments are the `Parens` after it |
 | `PairKey` | `:key`, `:!key`. The value is the node after it |
-| `Number`, `Version` | `42`, `1.5e3`, `0x1F`, `:16<FF>`, `½`, `∞`, and `v6.d` |
+| `Number`, `Version` | `42`, `1.5e3`, `0x1F`, `:16<FF>`, `½`, `Ⅻ`, `∞`, and `v6.d` |
 | `True`, `False`, `Nil` | These three words |
 | `Operator` | An operator made of symbols, a word operator where an operator is expected (`x`, `min`, `before`, `Z+`, `Zmin`), a set operator in parentheses (`(elem)`) |
 | `StringLiteral` | A quote of any kind. One that interpolates has `Escape`, `Interpolation`, variable, `Brackets`, `Parens` and `MethodCall` children, and a `NestedDelimiters` for each pair of its own delimiters in it (the `[b]` of `qq[a [b] c]`) |
@@ -170,13 +170,23 @@ Not supported yet:
   used, it is an operator when it is made of operator characters or of
   symbols outside of ASCII (`1 ⚡ 2`). One that is a word is a plain
   name, also between hyper marks (`@a »plus« @b`). A term or a circumfix of one's own is not known: one that is
-  a symbol is highlighted as an operator, and one that is a letter
-  outside of the ranges for names, such as `ℵ`, is an error.
+  a symbol is highlighted as an operator, or is an error when the symbol
+  is no operator character (`℃`), and one that is a letter and a number,
+  such as `ℵ₀`, is a name and a number.
+- A number that is one character is a `Number` when it is one of the
+  fractions, the Roman numerals, the subscripts, the circled numbers and
+  the ideographic numbers (`½`, `Ⅻ`, `₀`, `①`, `〇`). Others, as in the
+  scripts that have letters (`፩`, `௰`), are names, and so are the digits
+  of such scripts (`٤٢`). The full-width digits (`４２`) are errors.
 - After a name and a space, `+<`, `~<` and `!<` with no space after them
   are taken for a prefix and a word list, as in a call (`say +<a b>`),
   also when the name is a sigilless variable (`first +<a b>`). With a
   space after them, they are the infix (`first +< 64`). After a
   variable, they are always the infix, as in Raku.
+- After a name and a space, double angles start a word list, also when
+  the name is a sigilless variable and they start a hyper infix
+  (`x «+« 1`). After a variable or a whatever star, they are the hyper
+  (`$x «+« 1`, `* «+« 1`).
 - Double angles right after a prefix are taken for a hyper prefix
   (`-<<@a`), so a word list there needs a space: `say + «a b»`, not
   `say +«a b»`. After an infix with no space, they start a word list

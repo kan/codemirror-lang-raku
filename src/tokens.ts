@@ -95,10 +95,29 @@ function isIdentifierStart(ch: number) {
   return isAsciiLetter(ch) || ch == Ch.Underscore ||
     ch == 0xaa || ch == 0xb5 || ch == 0xba ||
     ch >= 0xc0 && ch <= 0x1fff && ch != 0xd7 && ch != 0xf7 && ch != 0x1680 ||
+    ch >= 0x2071 && ch <= 0x2184 && isLetterAmongSymbols(ch) ||
     ch >= 0x2c00 && ch <= 0x2fef ||
-    ch >= 0x3040 && ch <= 0xdfff ||
+    ch >= 0x3005 && ch <= 0x303c && (ch <= 0x3006 || ch >= 0x302a && ch <= 0x3035 && ch != 0x3030 || ch >= 0x303b) ||
+    ch >= 0x3040 && ch <= 0xdfff && !isEnclosedCjkNumber(ch) ||
     ch >= 0xf900 && ch <= 0xfdff ||
+    ch >= 0xfe70 && ch <= 0xfefc ||
     ch >= 0xff21 && ch <= 0xff3a || ch >= 0xff41 && ch <= 0xff5a || ch >= 0xff66 && ch <= 0xffdc
+}
+
+// The letters among the superscripts, subscripts, letterlike symbols
+// and number forms: ⁿ ₐ ℂ ℝ ℵ ⅅ Ↄ.
+function isLetterAmongSymbols(ch: number) {
+  return ch == 0x2071 || ch == 0x207f || ch >= 0x2090 && ch <= 0x209c ||
+    ch == 0x2102 || ch == 0x2107 || ch >= 0x210a && ch <= 0x2113 || ch == 0x2115 ||
+    ch >= 0x2119 && ch <= 0x211d || ch == 0x2124 || ch == 0x2126 || ch == 0x2128 ||
+    ch >= 0x212a && ch <= 0x212d || ch >= 0x212f && ch <= 0x2139 || ch >= 0x213c && ch <= 0x213f ||
+    ch >= 0x2145 && ch <= 0x2149 || ch == 0x214e || ch == 0x2183 || ch == 0x2184
+}
+
+// The numbers in the CJK blocks, which the grammar's Number takes: ㆒ ㈠ ㉑ ㊀ ㊱
+function isEnclosedCjkNumber(ch: number) {
+  return ch >= 0x3192 && ch <= 0x3195 || ch >= 0x3220 && ch <= 0x3229 || ch >= 0x3248 && ch <= 0x324f ||
+    ch >= 0x3251 && ch <= 0x325f || ch >= 0x3280 && ch <= 0x3289 || ch >= 0x32b1 && ch <= 0x32bf
 }
 
 // The characters that Operator runs are made of in syntax.grammar,
@@ -119,7 +138,9 @@ function isOperatorRunChar(ch: number) {
   return ch >= 0xa1 && ch <= 0xa9 || ch == 0xab || ch == 0xac || ch >= 0xae && ch <= 0xb1 || ch == 0xb4 ||
     ch >= 0xb6 && ch <= 0xb8 || ch == 0xbb || ch == 0xbf || ch == 0xd7 || ch == 0xf7 ||
     ch >= 0x2010 && ch <= 0x2017 || ch >= 0x2020 && ch <= 0x2027 || ch >= 0x2030 && ch <= 0x205e ||
-    ch >= 0x2190 && ch <= 0x2bff && ch != 0x2205 /* ∅ */ && ch != 0x221e /* ∞ */
+    ch >= 0x2190 && ch <= 0x2bff && ch != 0x2205 /* ∅ */ && ch != 0x221e /* ∞ */ &&
+      // The circled numbers: ① ⑴ ⒈ ⓪ ❶
+      !(ch >= 0x2460 && ch <= 0x249b || ch >= 0x24ea && ch <= 0x24ff || ch >= 0x2776 && ch <= 0x2793)
 }
 
 // Whether the character at offset `pos` would continue a name that ends
@@ -175,6 +196,11 @@ const enum Mode {
   // The last token was `multi`, `proto` or `only`. A term is expected,
   // and a name with a signature or a body declares a sub.
   AfterMulti,
+  // The last token was a lone `*` where a term was expected: the
+  // whatever star. Spacing decides what follows, as after a name, but
+  // double angles that an operator character follows start a hyper
+  // infix: * «+« 1
+  AfterStar,
 }
 
 // The things that a quote can interpolate, as bits. `"…"` and qq take
@@ -334,8 +360,10 @@ for (let term of [multi, proto, only]) termModes.set(term, Mode.AfterMulti)
 // characters. `after` is the mode before it.
 function modeAfterOperator(input: InputStream, offset: number, first: number, second: number, third: number,
                            after: Mode) {
-  // A lone `*` is as often the whatever star as a multiplication.
-  if (first == Ch.Star && !isOperatorChar(second)) return Mode.AfterName
+  // A lone `*` is as often the whatever star as a multiplication. After
+  // a term, it is the multiplication: in `$x * «-1 2»`, a word list follows.
+  if (first == Ch.Star && !isOperatorChar(second))
+    return after == Mode.AfterTerm || after == Mode.AfterBlock && !atLineStart(input, offset) ? Mode.AfterName : Mode.AfterStar
   // A power in superscript, $x², leaves the term complete. These are
   // the characters that the grammar's Operator token takes for one.
   // So does the empty set, ∅, which is a term.
@@ -635,7 +663,7 @@ function context(stack: Stack): Context { return stack.context }
 function inTermPosition(input: InputStream, mode: Mode, size: number) {
   if (mode == Mode.Term || mode == Mode.AfterMulti) return true
   if (mode == Mode.AfterTerm) return false
-  if (mode == Mode.AfterName) return isSpace(input.peek(-1)) && !isSpace(input.peek(size))
+  if (mode == Mode.AfterName || mode == Mode.AfterStar) return isSpace(input.peek(-1)) && !isSpace(input.peek(size))
   return atLineStart(input)
 }
 
@@ -951,6 +979,11 @@ function readOpening(input: InputStream, at = 0): Opening | null {
   // Whether a backslash escapes the delimiter, apart from the escapes
   // of :b. That comes with q and its :q adverb: Q and qq:!b have none.
   let escapes = isQuote ? kind == "raw" && next == Ch.q : true
+  // The adverbs of a quote can follow blanks on the same line: Q :q [a]
+  if (isQuote && isBlank(input.peek(pos))) {
+    let adverb = gapEnd(input, pos)
+    if (input.peek(adverb) == Ch.Colon) pos = adverb
+  }
   for (;;) {
     if (input.peek(pos) != Ch.Colon) break
     // An adverb can start with its count: m:2nd/a/, s:3x/a/b/
@@ -1463,7 +1496,31 @@ function closesHyperInfix(input: InputStream) {
   return 0
 }
 
+// The number of angles of a hyper operator at offset `pos`: 1 for « and
+// », 2 for << and >>, 0 for none.
+function hyperAngles(input: InputStream, pos: number) {
+  let ch = input.peek(pos)
+  if (ch == Ch.GuillemetOpen || ch == Ch.GuillemetClose) return 1
+  return (ch == Ch.Less || ch == Ch.Greater) && input.peek(pos + 1) == ch ? 2 : 0
+}
+
+// The offset after the hyper comma at offset `at`, as in @a »,« @b,
+// @a <<,>> @b and @a Z»,« @b, or 0. The comma is not an operator
+// character, so the grammar's Operator token would end before it, and
+// the angles after it would open a word list in term position. One that
+// starts with `«` or `<<` is only looked for after a term: `«a b»,«c d»`
+// are two word lists, whose `»` is part of a token of its own.
+function hyperCommaEnd(input: InputStream, at = 0) {
+  let open = hyperAngles(input, at)
+  if (!open || input.peek(at + open) != Ch.Comma) return 0
+  let close = hyperAngles(input, at + open + 1)
+  return close ? at + open + 1 + close : 0
+}
+
 function operatorHead(input: InputStream, mode: Mode) {
+  // A run that starts with » or >> starts no term.
+  let comma = hyperCommaEnd(input)
+  if (comma > 0) return input.acceptToken(wordOperator, comma)
   let end = operatorHeadEnd(input, inTermPosition(input, mode, 1))
   if (end > 0) input.acceptToken(wordOperator, end)
 }
@@ -1505,9 +1562,11 @@ export const termToken = new ExternalTokenizer((input, stack) => {
   }
 
   if (isIdentifierStart(next)) {
-    // The Z, X and R meta operators: Z+, X~, R-, Z=>
-    if ((next == Ch.Z || next == Ch.X || next == Ch.R) && isOperatorChar(input.peek(1)) && !continuesName(input, 1) &&
-        infixExpected(input, mode)) {
+    // The Z, X and R meta operators: Z+, X~, R-, Z=>, Z»,«
+    let meta = (next == Ch.Z || next == Ch.X || next == Ch.R) && infixExpected(input, mode)
+    let metaComma = meta ? hyperCommaEnd(input, 1) : 0
+    if (metaComma > 0) return input.acceptToken(wordOperator, metaComma)
+    if (meta && isOperatorChar(input.peek(1)) && !continuesName(input, 1)) {
       let pos = 2
       while (isOperatorChar(input.peek(pos))) pos++
       return input.acceptToken(wordOperator, pos)
@@ -1573,6 +1632,14 @@ export const termToken = new ExternalTokenizer((input, stack) => {
     return
   } else if (next == Ch.Less || next == Ch.GuillemetOpen) {
     let end, opening = wordListOpening(input, 0)
+    // After a term or a whatever star, double angles that an operator
+    // character follows start a hyper infix: @a «,« @b, * «+« 1
+    let afterStar = mode == Mode.AfterStar
+    if (opening && (afterStar || infixExpected(input, mode))) {
+      let comma = hyperCommaEnd(input)
+      if (comma > 0) return input.acceptToken(wordOperator, comma)
+      if (afterStar && isOperatorRunChar(input.peek(opening.start))) return
+    }
     if (inTermPosition(input, mode, 1)) {
       // [<] and [<=] are reductions, <-> starts a pointy block.
       let after = input.peek(1)
