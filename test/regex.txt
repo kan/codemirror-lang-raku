@@ -84,6 +84,14 @@ rx/foo/; m/bar/; rx{ a b }; m[c]; m:g:i/d/; rx:P5/e/; m!f!
 
 Program(Regex, Regex, Regex, Regex, Regex, Regex, Regex)
 
+# Adverbs that start with a count
+
+say m:2nd/x y/; s:3x/a/b/; m:1st/a/; m:nth(2)/x/; say 1 / 2
+
+==>
+
+Program(Identifier, Regex, Regex, Regex, Regex, Identifier, Number, Operator, Number)
+
 # The pieces of a regex literal
 
 if $s ~~ m:i/ ^ (\d+) $<n>=[\w+] <ident> { say $0 } <[a..z]> 'x' $x # c

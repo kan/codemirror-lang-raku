@@ -251,6 +251,23 @@ say 1;
 
 Program(RegexDeclaration(token, RegexName, ⚠, Block(Regex)), Identifier, Number)
 
+# Unknown characters in place of the name of a declaration leave it without one
+
+class ４２ is Foo { }
+sub ℝℝ foo { }
+method 〃 bar { }
+class #`(c) Foo { }
+sub # helper (x)
+foo { }
+
+==>
+
+Program(PackageDeclaration(class, ⚠, is, TypeName, Block),
+  RoutineDeclaration(sub, ⚠, Identifier, Block),
+  RoutineDeclaration(method, ⚠, Identifier, Block),
+  PackageDeclaration(class, BlockComment, PackageName, Block),
+  RoutineDeclaration(sub, LineComment, RoutineName, Block))
+
 # Mismatched brackets
 
 foo([1, 2);
