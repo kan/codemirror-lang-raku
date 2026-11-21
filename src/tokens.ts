@@ -1213,7 +1213,10 @@ function wordListEnd(input: InputStream, strict: boolean) {
     let ch = input.peek(pos)
     if (ch == close && repeats(input, pos, close, count)) return pos + count
     if (ch < 0) return -1
-    if (ch == Ch.Newline) lines++
+    // A backslash keeps the delimiter after it from closing the list: <a \> b>
+    // Not in a subscript, which cannot hold what follows it: $a<\$b>
+    if (ch == Ch.Backslash && !strict && input.peek(pos + 1) >= 0 && input.peek(pos + 1) != Ch.Newline) pos++
+    else if (ch == Ch.Newline) lines++
     else if (ch == Ch.Semicolon || ch == Ch.BraceOpen || ch == Ch.BraceClose ||
              ch == Ch.ParenOpen || ch == Ch.ParenClose) code = true
     if (lines > 1 && (code && lines > codeLines || strict)) return -1
@@ -1493,9 +1496,36 @@ export const termToken = new ExternalTokenizer((input, stack) => {
 function hasPostfix(input: InputStream, end: number) {
   let ch = input.peek(end)
   if (ch == Ch.BracketOpen || ch == Ch.ParenOpen || ch == Ch.BraceOpen || ch == Ch.Less) return true
-  if (ch != Ch.Dot) return false
-  let methodEnd = nameEnd(input, end + 1)
-  return methodEnd > 0 && input.peek(methodEnd) == Ch.ParenOpen
+  return interpolatesCall(input, end)
+}
+
+// How far interpolatesCall looks for the argument list of a chain of
+// calls. A token must not look far past its end.
+const maxCallChain = 24
+
+// Whether the method call that starts with the dot at offset `start` in
+// a string is interpolated: when it has an argument list, or when the
+// calls chained to it, up to one that has one, are short: "$x.a()",
+// "$x.a.b()". A chain that ends in no argument list is text: "$x.a.b"
+function interpolatesCall(input: InputStream, start: number) {
+  let size = methodDotSize(input, start)
+  if (!size) return false
+  // The limit counts from the current position, where the token that
+  // looks starts: the dot, or the sigil of "@a.sort.join()".
+  let pos = nameEnd(input, start + size), limit = maxCallChain
+  if (input.peek(pos) == Ch.ParenOpen) return true
+  while (pos <= limit) {
+    size = methodDotSize(input, pos)
+    if (!size) return false
+    // A name, which can be qualified: .Foo::bar
+    for (pos += size + 1; pos <= limit;) {
+      if (continuesName(input, pos)) pos++
+      else if (input.peek(pos) == Ch.Colon && input.peek(pos + 1) == Ch.Colon && isIdentifierStart(input.peek(pos + 2))) pos += 3
+      else break
+    }
+    if (input.peek(pos) == Ch.ParenOpen) return pos <= limit
+  }
+  return false
 }
 
 // Whether the parser is between the pieces of a quote, as opposed to
@@ -1806,13 +1836,12 @@ function methodDotSize(input: InputStream, pos: number) {
 
 // The dot of a method call, with its optional `?`, `+`, `*`, `^` or `&`
 // modifier. It is only produced when a name follows. In a string, a
-// method call is only interpolated after a variable, and when it has
-// an argument list: "$x.foo()"
+// method call is only interpolated after a variable, and when it or the
+// calls chained to it end in an argument list: "$x.foo()", "$x.a.b()"
 export const methodDotToken = new ExternalTokenizer((input, stack) => {
   let size = methodDotSize(input, 0)
   if (!size) return
-  if (context(stack).quote && inQuoteText(stack) &&
-      (!afterQuotedVariable(stack) || input.peek(nameEnd(input, size)) != Ch.ParenOpen)) return
+  if (context(stack).quote && inQuoteText(stack) && (!afterQuotedVariable(stack) || !interpolatesCall(input, 0))) return
   input.acceptToken(methodDot, size)
 })
 

@@ -138,6 +138,9 @@ say $hex ~~ m:2nd/x y/, 1 / 2;
 if $n { }
 ++$n;
 
+# A chain of calls in a string, and an escaped delimiter in a word list.
+say "$hex.raku.subst(/ "(" .* /)".trim, <a \> b>, «c \» $n»;
+
 =finish
 
 Anything after =finish is documentation: { ' " /
