@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-21
+
 ### Bug fixes
 
 - A word list or a regex right after an operator, with no space between
@@ -307,6 +309,7 @@ First release.
 - Completion of keywords and of the commonly used built-in types,
   routines, methods and special variables
 
+[0.5.0]: https://github.com/kan/codemirror-lang-raku/releases/tag/v0.5.0
 [0.4.1]: https://github.com/kan/codemirror-lang-raku/releases/tag/v0.4.1
 [0.4.0]: https://github.com/kan/codemirror-lang-raku/releases/tag/v0.4.0
 [0.3.0]: https://github.com/kan/codemirror-lang-raku/releases/tag/v0.3.0
