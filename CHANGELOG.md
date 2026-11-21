@@ -100,6 +100,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   around the variable. A word that the document does not declare as a
   type is still taken for a call after a `my` that is being typed on the
   line above it.
+- A hyper operator that holds a comma, as in `@a »,« @b`, `@a <<,>> @b`
+  and `@a Z»,« @b`, is one operator, and a hyper infix after a whatever star,
+  as in `* «+« 1`, no longer starts a word list. The closing angles could
+  open a word list that turned the strings after it inside out.
+- The adverbs of a quote can follow a blank: `Q :q [a \] b]` and
+  `qq :!s [$x]` are quotes, and so is the heredoc of `q :to/END/`.
 
 ### Performance
 
