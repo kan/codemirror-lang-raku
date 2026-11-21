@@ -410,6 +410,40 @@ describe("incremental parsing", () => {
       }
     }
   })
+
+  // Issue 33. The parser records the context at the end of the document
+  // on the nodes that group the top-level elements, and reuses them only
+  // where the context matches. A quote that is not closed used to leave
+  // the context in the quote there, so that an edit anywhere before it
+  // reparsed the whole document until the quote was closed.
+  it("reuses the code before a quote that is not closed", () => {
+    let parser = rakuLanguage.parser, filler = "my $a = 1;\nsay $a + 2;\n".repeat(400)
+    // The number of characters of `tree` that are covered by nodes of `old`.
+    let reused = (old, tree) => {
+      let seen = new Set(), total = 0
+      let collect = node => {
+        seen.add(node)
+        if (node instanceof Tree) node.children.forEach(collect)
+      }
+      let walk = node => {
+        if (seen.has(node)) total += node.length
+        else if (node instanceof Tree) node.children.forEach(walk)
+      }
+      collect(old)
+      walk(tree)
+      return total
+    }
+    for (let opener of ['say "a $x b', "say qq[a $x b", "say qq[a [b $x", 'say "a { $x', 'say "a { if $x { b', 'say "a $x[1', 'say "a \\', "say qq[a $x\\"]) {
+      for (let doc of [filler + opener, filler + opener + "\n" + filler]) {
+        let at = 2000, changed = doc.slice(0, at) + "x" + doc.slice(at), old = parser.parse(doc)
+        let fragments = TreeFragment.applyChanges(TreeFragment.addTree(old), [{fromA: at, toA: at, fromB: at, toB: at + 1}])
+        let tree = parser.parse(changed, fragments)
+        assert.strictEqual(tokens(tree), tokens(parser.parse(changed)), `after an edit before ${JSON.stringify(opener)}`)
+        assert.ok(reused(old, tree) > doc.length / 2,
+                  `${reused(old, tree)} of ${doc.length} characters reused before ${JSON.stringify(opener)}`)
+      }
+    }
+  })
 })
 
 // A heredoc's token depends on the quotes of the line before it, which

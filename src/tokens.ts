@@ -1498,8 +1498,13 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
     if (end > 0) return input.acceptToken(rawString, end)
   }
   let start = input.pos
-  // The text of a heredoc ends where the input does.
-  if (input.next < 0 && quote == heredocQuote) return input.acceptToken(quoteEnd)
+  // The text of a heredoc ends where the input does, and so does a
+  // quote that is not closed, with its nested pairs. Closing them here
+  // leaves the context outside the quote at the end of the document,
+  // where the parser records it for every repetition of the elements
+  // (see AGENTS.md). With the quote still open there, an edit before
+  // the quote reused nothing until the quote was closed.
+  if (input.next < 0) return input.acceptToken(quoteEnd)
   for (;;) {
     let next = input.next
     if (next < 0) break
@@ -1511,7 +1516,9 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
       return input.acceptToken(!atClose ? quoteNestOpen : stack.canShift(quoteNestClose) ? quoteNestClose : quoteEnd)
     }
     if (next == Ch.Backslash) {
-      if (interpolates & Interpolate.Backslash) break
+      // A backslash at the end of the input escapes nothing. It is text,
+      // so that the quote is closed after it.
+      if (interpolates & Interpolate.Backslash && input.peek(1) >= 0) break
       // Still keeps a delimiter after it from closing the quote.
       if (quote.escapes && input.peek(1) >= 0) input.advance()
     } else if (next == Ch.Dollar) {

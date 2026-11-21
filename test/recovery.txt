@@ -141,22 +141,62 @@ say 1;
 
 Program(Identifier, StringLiteral, Heredoc(Interpolation(Identifier, TypeName, ⚠)), Identifier, Number)
 
-# Unclosed interpolating quote
+# Unclosed interpolating quote ends with the input, with no error
 
 say qq[ a $b
 say 1;
 
 ==>
 
-Program(Identifier, StringLiteral(VariableName, ⚠))
+Program(Identifier, StringLiteral(VariableName))
 
-# Unclosed double-quoted string
+# Unclosed double-quoted string ends with the input, with no error
 
 "oops $x
 
 ==>
 
-Program(StringLiteral(VariableName, ⚠))
+Program(StringLiteral(VariableName))
+
+# Unclosed double-quoted string after a subscript ends with the input
+
+say "a $x[1
+
+==>
+
+Program(Identifier, StringLiteral(VariableName, Brackets(Number, ⚠)))
+
+# Unclosed double-quoted string that ends in a backslash
+
+say "a \
+
+==>
+
+Program(Identifier, StringLiteral)
+
+# Unclosed block of an interpolation ends with the quote and the input
+
+say "a { b
+
+==>
+
+Program(Identifier, StringLiteral(Interpolation(Identifier, ⚠)))
+
+# Unclosed quote in an unclosed block of an interpolation
+
+say "a { "b { $x
+
+==>
+
+Program(Identifier, StringLiteral(Interpolation(StringLiteral(Interpolation(VariableName, ⚠)), ⚠)))
+
+# Unclosed block in an interpolation
+
+say "a { if $x { b
+
+==>
+
+Program(Identifier, StringLiteral(Interpolation(if, VariableName, Block(Identifier, ⚠), ⚠)))
 
 # Code after an unclosed parenthesis is still tokenized
 
@@ -227,7 +267,7 @@ say $x;
 
 ==>
 
-Program(StringLiteral(NestedDelimiters, VariableName, ⚠))
+Program(StringLiteral(NestedDelimiters, VariableName))
 
 # Unclosed nested delimiter in a quote
 
@@ -236,4 +276,4 @@ say 1
 
 ==>
 
-Program(StringLiteral(NestedDelimiters(VariableName, ⚠), ⚠))
+Program(StringLiteral(NestedDelimiters(VariableName, ⚠)))
