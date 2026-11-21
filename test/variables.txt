@@ -146,3 +146,19 @@ $¢, $/, 1
 ==>
 
 Program(VariableName, VariableName, Number)
+
+# Named captures of the match
+
+$<name>, $<a-b><c>, @<list>, $<1>, 1
+
+==>
+
+Program(VariableName, VariableName, StringLiteral, VariableName, StringLiteral, Number)
+
+# A named capture with a long name is a sigil and a subscript
+
+$<abcdefghijklmnopqrstu>, $<abcdefghijklmnopqrst>
+
+==>
+
+Program(StringLiteral, ",", VariableName)

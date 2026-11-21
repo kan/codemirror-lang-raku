@@ -141,6 +141,11 @@ if $n { }
 # A chain of calls in a string, and an escaped delimiter in a word list.
 say "$hex.raku.subst(/ "(" .* /)".trim, <a \> b>, «c \» $n»;
 
+# Variables with a twigil, and named captures.
+say "home: %*ENV<HOME>, first: @*ARGS[0], in &?ROUTINE.name()", "%.2f of @!a";
+say "$<name> is $<name>.chars() long" if 'raku' ~~ / $<name>=[\w+] /;
+say @<names>.elems, $<a_capture_with_a_long_name and_another>;
+
 =finish
 
 Anything after =finish is documentation: { ' " /

@@ -325,7 +325,7 @@ Program(Identifier, Operator, Number, Operator, Operator, Number,
 ==>
 
 Program(VariableName, StringLiteral, VariableName, StringLiteral,
-  VariableName, StringLiteral, StringLiteral,
+  VariableName, StringLiteral, VariableName,
   VariableName, StringLiteral, StringLiteral,
   VariableName, Operator, VariableName,
   VariableName, Operator, Number, Operator, VariableName, Operator, Number)
@@ -631,6 +631,37 @@ Program(Identifier,
     VariableName, VariableName),
   Identifier, StringLiteral(VariableName, MethodCall(MethodName), MethodCall(MethodName), Parens),
   Number, Operator, Number)
+
+# Interpolation of variables with a twigil and of named captures
+
+"%*ENV<HOME> @*ARGS[0] @!items[] %.h<k> &?ROUTINE.name() $<name> $<a><b>.uc()"
+
+==>
+
+Program(StringLiteral(
+  SpecialVariable,
+  SpecialVariable, Brackets(Number),
+  AttributeName, Brackets,
+  AttributeName,
+  SpecialVariable, MethodCall(MethodName), Parens,
+  VariableName,
+  VariableName, MethodCall(MethodName), Parens))
+
+# Sigils with a twigil that do not interpolate
+
+"@*ARGS %*ENV %.2f @!a &?ROUTINE.name", qq:!h[%*ENV<a>]
+
+==>
+
+Program(StringLiteral, StringLiteral)
+
+# Code in parentheses interpolates after a $ only, as Raku wants a subscript after @ and %
+
+"$(1) @(1, 2) %( )"
+
+==>
+
+Program(StringLiteral(Parens(Number)))
 
 # Sigils that do not interpolate
 
