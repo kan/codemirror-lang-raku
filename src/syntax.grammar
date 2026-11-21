@@ -32,6 +32,7 @@ nonBlock {
   ConstantDeclaration |
   MethodCall |
   VariableName |
+  namedCapture |
   operatorVariable |
   AttributeName |
   SpecialVariable |
@@ -156,7 +157,7 @@ TypeName { capIdentifier (smiley | noSmiley) }
   quotePart {
     quoteContent | NestedDelimiters | Escape | Interpolation |
     // A `$` that does not start a variable is a lone sigil.
-    (VariableName | AttributeName | SpecialVariable | sigil) quotePostfix*
+    (VariableName | namedCapture | AttributeName | SpecialVariable | sigil) quotePostfix*
   }
 
   // A pair of the quote's delimiters inside it: qq[a [b] c]. This is a
@@ -247,7 +248,10 @@ capKw<term> { @specialize[@name={term}]<capIdentifier, term> }
   // The name after `multi`, `proto` or `only`, when no declarator follows.
   multiName,
   // &infix:<+>
-  operatorVariable[@name=VariableName]
+  operatorVariable[@name=VariableName],
+  // $<name> and @<name>, the named captures of the match, as $0 is a
+  // positional one.
+  namedCapture[@name=VariableName]
 }
 
 @tokens {

@@ -6,7 +6,7 @@ import {
   podStart, podEnd, podEndDirective, podText, PodDirective, PodHeading, PodStrong, PodEmphasis, PodCode, PodLink,
   PodFormat,
   MethodName, Version, regexLiteral, Regex, transliteration, Operator, Number as NumberTerm, radixNumber, PairKey,
-  VariableName, AttributeName, SpecialVariable, operatorVariable,
+  VariableName, AttributeName, SpecialVariable, operatorVariable, namedCapture,
   Identifier, TypeName, StringLiteral, Interpolation, NestedDelimiters, self, True, False, Nil, multi, proto, only,
   PackageName, RoutineName, methodRoutineName, RegexName, EnumName, SubsetName, ConstantName,
   methodDot, declaredName, declaredMethodName, declaredVariable, smiley, noSmiley, plainName, multiName, multiRoutineName, wordOperator,
@@ -311,7 +311,7 @@ const stringTerms = new Set([quotedString, interpolatingWordList, StringLiteral]
 // it. Shifting a token and reusing a node both look here, so that they
 // agree.
 const termModes = new Map<number, Mode>()
-for (let term of [VariableName, AttributeName, SpecialVariable, operatorVariable, NumberTerm, radixNumber, Version, MethodName,
+for (let term of [VariableName, AttributeName, SpecialVariable, operatorVariable, namedCapture, NumberTerm, radixNumber, Version, MethodName,
                   PairKey, rawString, quoteEnd, ...stringTerms, regexLiteral, transliteration, regexBody,
                   // The tree of the inside of a regex literal, which takes the
                   // place of the literal's token in a node that is reused.
@@ -1355,8 +1355,23 @@ function operatorHead(input: InputStream, mode: Mode) {
   if (end > 0) input.acceptToken(wordOperator, end)
 }
 
+// The offset after the named capture at the current position, as in
+// $<name> and @<name>, or -1. Only a short name is looked for, so that
+// a `$<` that is not closed does not look far: one of more than 20
+// characters is a sigil and a subscript.
+function namedCaptureEnd(input: InputStream) {
+  let next = input.next
+  if (next != Ch.Dollar && next != Ch.At || input.peek(1) != Ch.Less || !isIdentifierStart(input.peek(2))) return -1
+  for (let pos = 3; pos <= 22; pos++)
+    if (!continuesName(input, pos)) return input.peek(pos) == Ch.Greater ? pos + 1 : -1
+  return -1
+}
+
 // The tokens that depend on whether a term or an operator is expected.
 export const termToken = new ExternalTokenizer((input, stack) => {
+  // Also in a string, where it is interpolated.
+  let capture = namedCaptureEnd(input)
+  if (capture > 0 && stack.canShift(namedCapture)) return input.acceptToken(namedCapture, capture)
   if (!stack.canShift(regexLiteral)) {
     // At the start of the parse of the inside of a word list that
     // interpolates, its opening delimiter.
@@ -1491,6 +1506,13 @@ export const termToken = new ExternalTokenizer((input, stack) => {
   if (end > 0) input.acceptToken(rawString, end)
 })
 
+// The twigils that the grammar's variable tokens take: $!x, $.x, $*x,
+// $?x, $=x, $~x, $^x, $:x
+function isTwigil(ch: number) {
+  return ch == Ch.Bang || ch == Ch.Dot || ch == Ch.Star || ch == Ch.Question || ch == Ch.Equals || ch == Ch.Tilde ||
+    ch == Ch.Caret || ch == Ch.Colon
+}
+
 // Whether a sigil other than `$` interpolates: only when a subscript or
 // a call follows its name. `end` is the offset after the name.
 function hasPostfix(input: InputStream, end: number) {
@@ -1582,7 +1604,8 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
     } else if (next == Ch.At && interpolates & Interpolate.Array ||
                next == Ch.Percent && interpolates & Interpolate.Hash ||
                next == Ch.Amp && interpolates & Interpolate.Function) {
-      let end = nameEnd(input, 1)
+      // A name can have a twigil: "@*ARGS[0]", "%.h<k>", "&?ROUTINE.name()"
+      let end = nameEnd(input, isTwigil(input.peek(1)) ? 2 : 1)
       if (end > 0 && hasPostfix(input, end)) break
     }
     input.advance()

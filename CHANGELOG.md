@@ -56,6 +56,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or a coercion type, as in `my int @a`, `my num $n` and
   `my Foo(Str) $x`, and offers nothing for the variable that such a
   declaration is making up, as in `my int $new`.
+- In a string, an array, a hash or a routine with a twigil is
+  interpolated when a subscript or a call follows it, as one without a
+  twigil is: `"%*ENV<HOME>"`, `"@*ARGS[0]"`, `"@!items[]"`,
+  `"%.h<k>"`, `"&?ROUTINE.name()"`.
+- A named capture, `$<name>` or `@<name>`, is a variable, in code and
+  in strings, as `$0` and `$/` are. It used to be a sigil and a
+  subscript, which in a string were highlighted as its text. A name of
+  more than 20 characters still is.
 
 ### Performance
 

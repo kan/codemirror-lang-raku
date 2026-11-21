@@ -240,7 +240,8 @@ Heuristics that can be wrong:
   content.
 - In a `<<…>>` word list, a `>>` in a subscript or a call that is
   interpolated ends the list: `<<@a[1 >> 2]>>`, and so does the `>` of
-  a subscript right before the end, as in `<<x %h<b>>>`. A heredoc that
+  a subscript or a named capture right before the end, as in
+  `<<x %h<b>>>`, `<<x %*h<b>>>` and `<<x $<b>>>`. A heredoc that
   is opened in a block in a word list or in a regex literal is not read
   as one.
 - `q`, `qq`, `Q`, `m`, `rx`, `s`, `tr` and their variants start a quote
