@@ -100,5 +100,7 @@ my $digits=/^\d+$/;
 if $size ~~/"medium"/ { say +<a b c>, |<d e> }
 say 'any' if $size eq <1 2>|<2 1>;
 say !/x/, $count+<2, @sizes>>~<<@more, -<<@stock;
+@sizes >>[&max]=<< @more; say ">>";
+@sizes[0]=<<tiny $size>>;
 
 END { say 'done' }

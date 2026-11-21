@@ -182,6 +182,13 @@ Not supported yet:
   only when the infix is one character or ends in `=` (`@a=«a b»`,
   `$a==<<a b>>`), not after `~~`. A word list right after a hyper
   operator (`@a»+«<a b>`) is read as part of the operator.
+- In a hyper assignment with brackets, `=<<` and `=«` close the hyper
+  (`@a >>[&f]=<< @b`) only when the brackets are on one line and hold
+  about 20 characters at most, and no word follows the angles. With a
+  name right after them (`@a >>[&f]=<<foo`), or a longer infix in the
+  brackets, they start a word list, as after a hyper subscript
+  (`@a>>[0]=<<a b>>`). Brackets that start with a digit, `$` or `@` are
+  taken for a hyper subscript.
 - The `native` declarator, which NativeCall uses internally, does not
   make a declaration node.
 - Completion does not know types. After a `.` it offers the built-in
