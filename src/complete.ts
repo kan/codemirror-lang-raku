@@ -3,7 +3,7 @@ import {syntaxTree} from "@codemirror/language"
 import {SyntaxNode, Tree} from "@lezer/common"
 import {EditorState} from "@codemirror/state"
 import {keywordTags} from "./keywords"
-import {localNames, declaresVariable, hasSigil, isPlaceholder} from "./local"
+import {localNames, declaresVariable, isPlaceholder} from "./local"
 
 function completions(type: string, ...labels: string[]): Completion[] {
   return labels.join(" ").split(" ").map(label => ({label, type}))
@@ -129,7 +129,7 @@ export const rakuCompletionSource: CompletionSource = context => {
     // A placeholder variable is declared by being used, also by the
     // one that is being typed, which is not offered for itself.
     let typed = isVariableNode ? state.sliceDoc(from, node.to) : ""
-    let options = withLocal(localNames(parent, state).names.filter(hasSigil), [])
+    let options = withLocal(localNames(parent, state).variables, [])
     if (isPlaceholder(typed)) options = options.filter(completion => completion.label != typed)
     return options.length ? {from, options, validFor: variableTail} : null
   }
@@ -146,7 +146,7 @@ export const rakuCompletionSource: CompletionSource = context => {
     return numeric && !context.explicit ? null : {from: pos, options: localMethods(), validFor: nameTail}
   }
 
-  let localGlobals = () => withLocal(local.names.filter(completion => !hasSigil(completion)), globals)
+  let localGlobals = () => withLocal(local.names, globals)
   // A keyword's node is named after the keyword, as are those of `,` and `;`.
   let isKeyword = /^\w/.test(node.name) && node.name == state.sliceDoc(node.from, node.to)
   if (isKeyword || node.name == "Identifier" || node.name == "TypeName") {

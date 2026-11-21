@@ -1,6 +1,6 @@
 import {raku, rakuLanguage, rakuCompletion} from "../dist/index.js"
 import {fileTests} from "@lezer/generator/dist/test"
-import {LanguageSupport, getIndentation, foldable, matchBrackets, ensureSyntaxTree} from "@codemirror/language"
+import {LanguageSupport, getIndentation, foldable, matchBrackets, ensureSyntaxTree, syntaxTree} from "@codemirror/language"
 import {EditorState} from "@codemirror/state"
 import {CompletionContext} from "@codemirror/autocomplete"
 import {toggleBlockComment} from "@codemirror/commands"
@@ -913,6 +913,79 @@ sub other($elsewhere) { my $inner; state $kept }
     state = parsed(state.update({changes: {from, to: from + 5, insert: "omega"}}).state)
     assert.ok(labels(state).includes("$omega"))
     assert.ok(!labels(state).includes("$alpha"))
+  })
+
+  it("finds the variables that are declared with a native or coercion type", () => {
+    assert.deepStrictEqual(complete("my num $n; my str $s; my uint8 $u; say $|").sort(), ["$n", "$s", "$u"])
+    assert.deepStrictEqual(complete("my int @arr; say @|"), ["@arr"])
+    assert.deepStrictEqual(complete("my Foo(Str) $x; my Int:D(Cool) $y; say $|").sort(), ["$x", "$y"])
+    assert.deepStrictEqual(complete("my int ($a, $b); say $|").sort(), ["$a", "$b"])
+    assert.deepStrictEqual(complete("sub f(int $i) { say $| }"), ["$i"])
+    assert.deepStrictEqual(complete("my $count; my int $a, $c|"), ["$count"])
+    for (let code of ["my $v; my int $new|", "my $v; my int $|", "my $v; my Foo(Str) $n|", "my $v; my Int:D(Cool) $|"])
+      assert.strictEqual(complete(code), null, code)
+    // A word that is not a native type is a call after an unfinished `my`.
+    assert.deepStrictEqual(complete("my $a; my\nsay $|"), ["$a"])
+    assert.deepStrictEqual(complete("my $a; my\nfoo $b; say $|"), ["$a"])
+  })
+
+  // The names of the parts of a document that an edit leaves alone are
+  // kept, which must give what gathering them all over again gives.
+  it("offers what a fresh state offers after edits", function() {
+    this.timeout(20000)
+    let snippets = ["my int $q; ", "my ", "\\", "{", "}", "(", ")", " ", "\n", ";", "$x", "sub g { }", "class C { has $.c; method m { } }",
+                    "constant ", "%h", "Foo", "{ $^p }", "\"", "=begin pod\n"]
+    let parsed = state => {
+      ensureSyntaxTree(state, state.doc.length, 1e9)
+      return state.update({}).state
+    }
+    let options = (state, pos, explicit) => {
+      let [source] = state.languageDataAt("autocomplete", pos)
+      let result = source(new CompletionContext(state, pos, explicit))
+      return result && result.options.map(option => option.label + ":" + option.type)
+    }
+    let dir = path.join(caseDir, "fixtures"), original = ""
+    for (let file of fs.readdirSync(dir)) original += fs.readFileSync(path.join(dir, file), "utf8").replace(/^=finish[^]*/m, "")
+    original = original.repeat(3)
+    let seed = 42, random = max => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) % max
+    let state, compared = 0
+    for (let i = 0; i < 100; i++) {
+      if (i % 25 == 0) state = parsed(stateFor(original + "\nsay $"))
+      let length = state.doc.length - 6, from = random(length + 1), to = from, insert = ""
+      if (random(3) == 0) to = Math.min(length, from + 1 + random(4))
+      else insert = snippets[random(snippets.length)]
+      state = parsed(state.update({changes: {from, to, insert}}).state)
+      let fresh = parsed(stateFor(state.doc.toString()))
+      // Around a syntax error, the two trees can differ.
+      if (syntaxTree(state).toString() != syntaxTree(fresh).toString()) continue
+      compared++
+      for (let [pos, explicit] of [[state.doc.length, false], [random(state.doc.length + 1), true]])
+        assert.deepStrictEqual(options(state, pos, explicit), options(fresh, pos, explicit), `after edit ${i} at ${pos}`)
+    }
+    assert.ok(compared > 30, `compared ${compared}`)
+  })
+
+  // A declarator before a long run of types reaches parts of the run
+  // that the new tree reuses, and what is kept for them was gathered
+  // without it.
+  it("sees a declarator that an edit adds before reused parts", () => {
+    let parsed = state => {
+      ensureSyntaxTree(state, state.doc.length, 1e9)
+      return state.update({}).state
+    }
+    let labels = state => {
+      let pos = state.doc.length, [source] = state.languageDataAt("autocomplete", pos)
+      let result = source(new CompletionContext(state, pos, false))
+      return result ? result.options.map(option => option.label) : []
+    }
+    for (let type of ["Int ", "int ", "Array[Int] "]) {
+      let state = parsed(stateFor("f " + type.repeat(3000) + "$x;\nsay $"))
+      assert.deepStrictEqual(labels(state), [], type)
+      state = parsed(state.update({changes: {from: 0, to: 1, insert: "my"}}).state)
+      assert.deepStrictEqual(labels(state), ["$x"], type)
+      state = parsed(state.update({changes: {from: 0, to: 2, insert: "f"}}).state)
+      assert.deepStrictEqual(labels(state), [], type)
+    }
   })
 
   it("does not list variables for a sigil that is as often an operator", () => {
