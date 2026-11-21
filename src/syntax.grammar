@@ -131,7 +131,10 @@ TypeName { capIdentifier (smiley | noSmiley) }
   regexPiece {
     regexText | Escape | CharacterClass | Assertion | regexQuote | regexOperator | regexComment |
     regexBlockComment | regexCapture |
-    VariableName | AttributeName | SpecialVariable | RegexCode
+    VariableName | AttributeName | SpecialVariable | RegexCode |
+    // The text of a heredoc that a block of code in the regex opened:
+    // token a { { Q:to/END/ } ... }
+    rawHeredoc | interpolatingHeredoc
   }
 
   // A Pod block. Its text is the part that no child node covers.

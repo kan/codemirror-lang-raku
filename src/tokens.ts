@@ -629,6 +629,12 @@ export const trackContext = new ContextTracker<Context>({
       return context
     }
     if (term == rawString) context = context.withHeredocs(withHeredocAt(context.heredocs, input, 0))
+    // In the body of a regex, a line break is in the text of the regex,
+    // which is no node. Like a line break between tokens, it leaves the
+    // heredocs that found no terminator behind, as heredocsAfter takes
+    // a line break between nodes to do.
+    if (term == regexText && context.heredocs.length && hasNewline(input, 0, stack.pos - input.pos))
+      context = context.withHeredocs(noHeredocs)
     // The input is at the start of the token, and the stack at its end.
     return context.withMode(modeAfter(term, input, 0, context.mode, stack.pos - input.pos))
   },
@@ -1071,23 +1077,26 @@ function quotedEnd(input: InputStream, pos: number) {
   }
 }
 
-// The offset after the arguments of the assertion that starts with the
-// `<` at `pos`, or 0 when it has none on its line. The arguments are
-// code, in which the delimiter of the regex does not end it:
-// <name(1/2)>, <:name(/x/)>, <name: /a<b>+/ >
+// The offset after the names and the arguments of the assertion that
+// starts with the `<` at `pos`, or 0 when no name starts it. The
+// arguments are code, in which the delimiter of the regex does not end
+// it: <name(1/2)>, <:name(/x/)>, <name: /a<b>+/ >. A name takes in an
+// apostrophe before a letter, which starts no quote: <it's>
 function assertionArgumentsEnd(input: InputStream, pos: number) {
   // An assertion can add up several names: <+:Lu +:name(/SMALL/)>
-  for (let at = pos + 1;;) {
+  for (let at = pos + 1, names = 0;;) {
     while (isAssertionMark(input.peek(at)) || isBlank(input.peek(at))) at++
     let end = nameEnd(input, at)
-    if (end < 0) return 0
+    if (end < 0) return names
     // With parentheses, up to the one that closes them. After a colon
     // and a space, up to the `>` that closes the assertion.
     let open = input.peek(end)
     if (open == Ch.ParenOpen) return balancedEnd(input, end + 1, Ch.ParenOpen, Ch.ParenClose)
     if (open == Ch.Colon && isBlank(input.peek(end + 1))) return balancedEnd(input, end + 1, Ch.Less, Ch.Greater)
-    at = end
-    if (!isAssertionMark(input.peek(at)) && !isBlank(input.peek(at))) return 0
+    at = names = end
+    // The name of an alias is followed by the assertion it names: <foo=it's>
+    if (input.peek(at) == Ch.Equals) at++
+    else if (!isAssertionMark(input.peek(at)) && !isBlank(input.peek(at))) return names
   }
 }
 
@@ -1097,8 +1106,8 @@ function isAssertionMark(ch: number) {
     ch == Ch.Hyphen
 }
 
-// The offset after the code that the `<` or `:` at `pos` in a regex
-// starts, or 0 when it starts none.
+// The offset after the names and the code that the `<` or `:` at `pos`
+// in a regex starts, or 0 when it starts neither.
 function regexCodeEnd(input: InputStream, pos: number) {
   return input.peek(pos) == Ch.Less ? assertionArgumentsEnd(input, pos) : regexDeclarationEnd(input, pos)
 }
@@ -1114,18 +1123,20 @@ function regexDeclarationEnd(input: InputStream, pos: number) {
     let ch = input.peek(end)
     if (ch < 0 || ch == Ch.Newline) return 0
     if (ch == Ch.Semicolon) return end + 1
-    let quoted = quoteClose(ch) ? quotedEnd(input, end) : -1
+    let quoted = quoteClose(ch) ? quotedEnd(input, end) : isIdentifierStart(ch) ? nameEnd(input, end) : -1
     end = quoted > 0 ? quoted : end + 1
   }
 }
 
 // The offset after the `close` that matches an `open` before `pos`, or
-// 0 when there is none on the line. Quotes are gone over.
+// 0 when there is none on the line. Quotes are gone over, and so are
+// names, which take in an apostrophe before a letter: don't
 function balancedEnd(input: InputStream, pos: number, open: number, close: number) {
   for (let depth = 1;;) {
     let ch = input.peek(pos)
     if (ch < 0 || ch == Ch.Newline) return 0
     if (ch == Ch.Backslash) pos += 2
+    else if (isIdentifierStart(ch)) pos = nameEnd(input, pos)
     else if (quoteClose(ch)) {
       let quoted = quotedEnd(input, pos)
       pos = quoted < 0 ? pos + 1 : quoted
@@ -1140,7 +1151,8 @@ function balancedEnd(input: InputStream, pos: number, open: number, close: numbe
 // The offset of the delimiter that closes a regex whose content starts
 // at `pos`, or -1. Delimiters do not count inside quotes, character
 // classes, comments and code blocks. `code` is set for the inside of a
-// code block, where a `<` is an operator.
+// code block, where a `<` is an operator, and a name takes in an
+// apostrophe before a letter, which starts no quote there: don't()
 function regexEnd(input: InputStream,
                   {start: pos, open, close, count}: Pick<Opening, "start" | "open" | "close" | "count">,
                   code = false): number {
@@ -1153,8 +1165,19 @@ function regexEnd(input: InputStream,
       if (--depth == 0) return pos
       pos += count
     } else if (ch == open && repeats(input, pos, open, count)) {
-      pos += count
-      depth++
+      // In a regex in braces, a brace opens a block of code, as it
+      // does in other regexes (below): m{ a { don't() } }. When the
+      // block is not closed, neither is the regex.
+      if (!code && open == Ch.BraceOpen && count == 1) {
+        let end = regexEnd(input, {start: pos + 1, open, close, count}, true)
+        if (end < 0) return -1
+        pos = end + 1
+      } else {
+        pos += count
+        depth++
+      }
+    } else if (code && isIdentifierStart(ch)) {
+      pos = nameEnd(input, pos)
     } else if (quoteClose(ch)) {
       let end = quotedEnd(input, pos)
       pos = end < 0 ? pos + 1 : end
@@ -1190,6 +1213,15 @@ function regexEnd(input: InputStream,
       }
       // The bracket that closes the class is not one of the regex: rx[ <[a]> ]
       pos++
+      // A name that is added to the class, as in <[a]+it's>, takes in an
+      // apostrophe before a letter, as assertionEnd reads it.
+      let name = pos
+      while (input.peek(name) == Ch.Space) name++
+      if (input.peek(name) == Ch.Plus || input.peek(name) == Ch.Hyphen) {
+        do name++; while (input.peek(name) == Ch.Space)
+        let end = nameEnd(input, name)
+        if (end > 0) pos = end
+      }
     } else if (ch == Ch.Hash) {
       // An embedded comment, or one that runs to the end of the line.
       let end = embeddedCommentEnd(input, pos)
@@ -1851,6 +1883,10 @@ function assertionEnd(input: InputStream) {
       if (ch == Ch.Greater) return pos
     } else if (ch == Ch.Backslash) {
       pos += input.peek(pos + 1) == Ch.Newline || input.peek(pos + 1) < 0 ? 1 : 2
+    } else if (isIdentifierStart(ch)) {
+      // A name takes in an apostrophe before a letter, as regexEnd
+      // reads it: <it's>
+      pos = nameEnd(input, pos)
     } else if (quoteClose(ch)) {
       let end = quotedEnd(input, pos)
       pos = end < 0 ? pos + 1 : end
