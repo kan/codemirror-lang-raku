@@ -175,6 +175,42 @@ say 〃 1;
 
 Program(Identifier, ⚠, Number)
 
+# Unknown characters in a row are not Pod
+
+say ４２;
+say "after";
+
+==>
+
+Program(Identifier, ⚠, Identifier, StringLiteral)
+
+# Letterlike symbols in a row are not Pod
+
+my %h = ℝℝ => 1, ℵ₀ => 2;
+say "after";
+
+==>
+
+Program(my, VariableName, Operator, ⚠, Operator, Number, ⚠, Operator, Number, Identifier, StringLiteral)
+
+# Backticks in a row are not Pod
+
+say 1 ``` 2;
+say "after";
+
+==>
+
+Program(Identifier, Number, ⚠, Number, Identifier, StringLiteral)
+
+# Unknown characters after the name of a declaration are not Pod
+
+token t ４２ { a }
+say 1;
+
+==>
+
+Program(RegexDeclaration(token, RegexName, ⚠, Block(Regex)), Identifier, Number)
+
 # Mismatched brackets
 
 foo([1, 2);
