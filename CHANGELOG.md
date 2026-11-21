@@ -17,6 +17,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   differently than in a parse from scratch: the name in `++x` could
   become an operator.
 
+### Performance
+
+- Reparsing after an edit is faster in a huge quote: a 1-character edit
+  in a `"…"` or `qq[…]` of about 200 KB takes 55–70% of the time it did.
+
+### Dependencies
+
+- Requires `@lezer/lr` 1.4.12 or later. With 1.4.11, an edit
+  can keep the parser from reusing the first child of the node that holds
+  it, and a 1-character edit reads about three times as much text again.
+
 ## [0.4.1] - 2026-11-10
 
 ### Internal
