@@ -1359,8 +1359,14 @@ function infixExpected(input: InputStream, mode: Mode) {
 //   word follows starts a subscript: *<key>
 // - a run that starts with `\`, as in the triangular reductions [\<]
 //   and [\/]
+// - an `=` and double angles that close a hyper operator in brackets:
+//   @a >>[&f]=<< @b, @a »[+]=« @b (see closesHyperInfix)
 function operatorHeadEnd(input: InputStream, termPosition: boolean) {
   let first = input.next
+  if (first == Ch.Equals && !termPosition) {
+    let hyper = closesHyperInfix(input)
+    if (hyper > 0) return hyper
+  }
   if (first == Ch.Less || first == Ch.GuillemetOpen || first == Ch.GuillemetClose || first == Ch.Backslash ||
       first == Ch.Greater && input.peek(1) == first) return 0
   for (let pos = 1;; pos++) {
@@ -1383,6 +1389,46 @@ function operatorHeadEnd(input: InputStream, termPosition: boolean) {
       if (!infix && !afterTerm) return pos
     }
   }
+}
+
+// How far back closesHyperInfix looks for the opening bracket and the
+// `>>` before it. It stays within the margin of 25 characters that
+// Lezer leaves before reusing a node after an edit, so that an edit
+// there reads the run again.
+const maxHyperInfixBack = 22
+
+// Whether the run of `=` and double angles at the current position
+// closes a hyper operator that holds an infix in brackets or
+// parentheses, as in @a >>[&f]=<< @b and @a »(|)=« @b. The `=` makes
+// the infix an assignment, and the angles close the hyper. Right after
+// a subscript, the same characters are an assignment of a word list:
+// @a[1]=<<a b>>. What tells them apart is the `>>` or `»` before the
+// opening bracket, that the bracket does not start with a digit or a
+// `$` or `@` sigil, which start an index, and that no word follows the
+// angles: in @a>>[0]=<< a b >> and @a>>[$i]=<<a b>>, a hyper subscript
+// is assigned a word list. Returns the length of the `=` and the angles,
+// or 0, so that a prefix right after them is a token of its own:
+// @a >>[+]=<<-@b
+function closesHyperInfix(input: InputStream) {
+  let angles = input.peek(1) == Ch.GuillemetOpen ? 1 : input.peek(1) == Ch.Less && input.peek(2) == Ch.Less ? 2 : 0
+  let after = input.peek(1 + angles)
+  if (!angles || isIdentifierStart(after) || isDigit(after)) return 0
+  let close = input.peek(-1)
+  if (close != Ch.BracketClose && close != Ch.ParenClose) return 0
+  let open = close == Ch.BracketClose ? Ch.BracketOpen : Ch.ParenOpen
+  for (let pos = -2, depth = 0; pos > -maxHyperInfixBack; pos--) {
+    let ch = input.peek(pos)
+    if (ch < 0 || ch == Ch.Newline) return 0
+    if (ch == close) depth++
+    else if (ch == open && depth-- == 0) {
+      let inside = input.peek(pos + 1)
+      if (isDigit(inside) || inside == Ch.Dollar || inside == Ch.At) return 0
+      let hyper = input.peek(pos - 1) == Ch.GuillemetClose ||
+        input.peek(pos - 1) == Ch.Greater && input.peek(pos - 2) == Ch.Greater
+      return hyper ? 1 + angles : 0
+    }
+  }
+  return 0
 }
 
 function operatorHead(input: InputStream, mode: Mode) {

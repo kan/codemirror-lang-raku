@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `foo |<a b>`, `say +<a b c>`, `my @w=«a b»`, `<1 2>|<2 1>`,
   `$s ~~/^\d+$/`, `say !/x/`. A quote in such a regex could turn the
   rest of the document inside out. Operators that hold these characters
-  stay whole: `//=`, `<=>`, `<==`, `>>+<<`, `»+«`, `-<<`, and the shifts
-  and negations `+<`, `~<`, `!<` after a term.
+  stay whole: `//=`, `<=>`, `<==`, `>>+<<`, `»+«`, `-<<`, the end of a
+  hyper assignment with brackets (`@a >>[&f]=<< @b`, `@a »[+]=« @b`),
+  and the shifts and negations `+<`, `~<`, `!<` after a term.
 - `*<key>` is a subscript on the whatever star, and `$i++/2` and `*/2`
   divide.
 - `=:=` is one operator.

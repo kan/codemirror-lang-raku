@@ -326,3 +326,36 @@ $a=-<<@b; say $x >> 1; @a=-«@b; [\<] @a; [\<=] @a; [\/] @a
 Program(VariableName, Operator, VariableName, Identifier, VariableName, Operator, Number,
   VariableName, Operator, VariableName,
   Brackets(Operator), VariableName, Brackets(Operator), VariableName, Brackets(Operator), VariableName)
+
+# An assignment in a hyper operator with brackets stays whole
+
+@a >>[&f]=<< @b; f(">>"); @a »[&f]=« @b; f("«»"); @a >>[+]=<<@b; @a »[R~]=«@b; @a >>(|)=<< @b;
+@a >>[+]=<<-@b
+
+==>
+
+Program(VariableName, Operator, Brackets(VariableName), Operator, VariableName,
+  Identifier, Parens(StringLiteral),
+  VariableName, Operator, Brackets(VariableName), Operator, VariableName,
+  Identifier, Parens(StringLiteral),
+  VariableName, Operator, Brackets(Operator), Operator, VariableName,
+  VariableName, Operator, Brackets(TypeName, Operator), Operator, VariableName,
+  VariableName, Operator, Parens(Operator), Operator, VariableName,
+  VariableName, Operator, Brackets(Operator), Operator, Operator, VariableName)
+
+# A word list assigned right after a subscript or a hyper subscript
+
+@a[1]=<a b>; @a[1]=<<a b>>; @a[1]=«a b»; %h{1}=<<a b>>; f()=<<a b>>; @a>>[0]=<<a b>>; @a»[0]=«a b»;
+@a>>[0]=<< a b >>; @a>>[$i]=<<$x $y>>
+
+==>
+
+Program(VariableName, Brackets(Number), Operator, StringLiteral,
+  VariableName, Brackets(Number), Operator, StringLiteral,
+  VariableName, Brackets(Number), Operator, StringLiteral,
+  VariableName, Block(Number), Operator, StringLiteral,
+  Identifier, Parens, Operator, StringLiteral,
+  VariableName, Operator, Brackets(Number), Operator, StringLiteral,
+  VariableName, Operator, Brackets(Number), Operator, StringLiteral,
+  VariableName, Operator, Brackets(Number), Operator, StringLiteral,
+  VariableName, Operator, Brackets(VariableName), Operator, StringLiteral(VariableName, VariableName))
