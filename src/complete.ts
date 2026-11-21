@@ -125,11 +125,12 @@ export const rakuCompletionSource: CompletionSource = context => {
     // A lone sigil is not a node. It lies in the node around it.
     let parent = isVariableNode ? node.parent! : tree.resolveInner(from, 0)
     let prev = isVariableNode ? node.prevSibling : parent.childBefore(from)
-    if (declaresVariable(state, parent, prev)) return null
+    let local = localNames(parent, state)
+    if (declaresVariable(state, parent, prev, local.types)) return null
     // A placeholder variable is declared by being used, also by the
     // one that is being typed, which is not offered for itself.
     let typed = isVariableNode ? state.sliceDoc(from, node.to) : ""
-    let options = withLocal(localNames(parent, state).variables, [])
+    let options = withLocal(local.variables, [])
     if (isPlaceholder(typed)) options = options.filter(completion => completion.label != typed)
     return options.length ? {from, options, validFor: variableTail} : null
   }
@@ -154,7 +155,7 @@ export const rakuCompletionSource: CompletionSource = context => {
     let prev = node.prevSibling
     // The name of a variable without a sigil, where it is declared: my \x
     if (prev && prev.to == node.from && state.sliceDoc(prev.from, prev.to) == "\\" &&
-        declaresVariable(state, node.parent!, prev.prevSibling)) return null
+        declaresVariable(state, node.parent!, prev.prevSibling, local.types)) return null
     // `$x .= trim` calls a method.
     let afterDotAssign = prev != null && prev.name == "Operator" && state.sliceDoc(prev.from, prev.to) == ".="
     // The colons of a type capture, ::T, and of ::?CLASS are not part of the name.

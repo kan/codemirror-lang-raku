@@ -84,6 +84,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The import list after the version or the author of a module is a
   word list: `use Foo:ver<1>:auth<zef:me> <a b>`.
 - A byte order mark at the start of a file is whitespace, not an error.
+- Completion offers the variables that are declared with a type of the
+  document's own whose name is not capitalized, as in
+  `class point { }; my point $p`, when the type is declared in a scope
+  around the variable. A word that the document does not declare as a
+  type is still taken for a call after a `my` that is being typed on the
+  line above it.
 
 ### Performance
 
