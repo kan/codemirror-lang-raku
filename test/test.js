@@ -324,6 +324,23 @@ describe("incremental parsing", () => {
       }
     }
   })
+
+  // A `++` or `--` at the end of a reused node is prefix or postfix
+  // by what comes before it, as when its token is shifted.
+  it("reads what follows a reused increment the same after an edit", function() {
+    this.timeout(20000)
+    let parser = rakuLanguage.parser
+    for (let line of ["my \\x = 1; ++x; --x;\n", "$y++ + ++x; - --x; $y++ ++ x;\n"]) {
+      let doc = line.repeat(400)
+      for (let at = 0; at < doc.length; at += 211) {
+        let changed = doc.slice(0, at) + " " + doc.slice(at)
+        let fragments = TreeFragment.applyChanges(TreeFragment.addTree(parser.parse(doc)),
+                                                  [{fromA: at, toA: at, fromB: at, toB: at + 1}])
+        assert.strictEqual(tokens(parser.parse(changed, fragments)), tokens(parser.parse(changed)),
+                           `after an edit at ${at} in ${JSON.stringify(line)}`)
+      }
+    }
+  })
 })
 
 // A heredoc's token depends on the quotes of the line before it, which

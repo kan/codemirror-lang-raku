@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   letterlike symbols (`ℝℝ`, `ℵ₀`) or backticks (`` 1 ``` 2 ``), no longer
   turn the code after them, up to the next blank line, into Pod. They are
   errors, and the code after them is read as code.
+- After an edit, what follows a prefix `++` or `--` could be read
+  differently than in a parse from scratch: the name in `++x` could
+  become an operator.
 
 ## [0.4.1] - 2026-11-10
 

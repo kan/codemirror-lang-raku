@@ -459,6 +459,36 @@ function lastToken(node: SyntaxNode): SyntaxNode | null {
   return null
 }
 
+// The token before `token` in `top`, by the same rule as lastToken.
+// Null when there is none in it.
+function tokenBefore(token: SyntaxNode, top: SyntaxNode): SyntaxNode | null {
+  for (let node: SyntaxNode = token; node != top && node.parent; node = node.parent)
+    for (let sibling = node.prevSibling; sibling; sibling = sibling.prevSibling) {
+      let found = skippedTerms.has(sibling.type.id) ? null : lastToken(sibling)
+      if (found) return found
+    }
+  return null
+}
+
+// The mode after a reused node, which `before` is the mode before. Only
+// an operator's mode depends on the mode before it (a `++` is postfix
+// after a term), so the operators at the end of the node are gone back
+// over to the token before them, and their modes are worked out from
+// there, as shifting them did. Null when the node holds no token.
+function modeAfterNode(top: SyntaxNode, input: InputStream, before: Mode): Mode | null {
+  let last = lastToken(top)
+  if (!last) return null
+  let operators: SyntaxNode[] = [], token: SyntaxNode | null = last
+  while (token && (token.type.id == Operator || token.type.id == wordOperator)) {
+    operators.push(token)
+    token = tokenBefore(token, top)
+  }
+  // The node's positions count from its start, where the input is.
+  let mode = token ? modeAfter(token.type.id, input, token.from, before) : before
+  for (let i = operators.length - 1; i >= 0; i--) mode = modeAfter(operators[i].type.id, input, operators[i].from, mode)
+  return mode
+}
+
 export const trackContext = new ContextTracker<Context>({
   start: startContext,
   shift(context, term, _stack, input) {
@@ -530,10 +560,8 @@ export const trackContext = new ContextTracker<Context>({
   reuse(context, node, stack, input) {
     let inQuote = context.quote != null && inQuoteText(stack)
     context = context.withHeredocs(heredocsAfter(node, input, context.heredocs, inQuote))
-    // The node's positions count from its start, where the input is.
-    let last = lastToken(node.topNode)
-    // What comes before a trailing `++` in a reused node is a term.
-    return last ? context.withMode(modeAfter(last.type.id, input, last.from, Mode.AfterTerm)) : context
+    let mode = modeAfterNode(node.topNode, input, context.mode)
+    return mode == null ? context : context.withMode(mode)
   },
   hash: context => context.hash
 })
