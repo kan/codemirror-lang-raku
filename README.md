@@ -284,9 +284,10 @@ and is labelled `enhancement` to make the next release a minor one.
 Releases are made with [tagpr](https://github.com/Songmu/tagpr). It keeps
 a release pull request open that bumps the version and turns
 `## [Unreleased]` into the version's section. Merging it tags the merge
-commit, and a workflow then publishes the version to npm with Trusted
+commit, and a workflow then stages the version on npm with Trusted
 Publishing and creates the GitHub release from the section of
-`CHANGELOG.md`.
+`CHANGELOG.md`. The staged version is public once the maintainer approves
+it.
 
 ## License
 

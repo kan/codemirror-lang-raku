@@ -20,7 +20,7 @@ CodeMirror 6 用の Raku（旧 Perl 6）言語サポートを作るリポジト�
 - **`npm publish` を手元で実行しない。** npm への公開は、リリース PR のマージから
   `publish.yml` が行う（後段「公開の手順」）
 - **`v*` のタグを手で作らない、push しない。** タグは tagpr が打つ。打ち直しはユーザーの明示的な
-  指示があるときだけ行う。タグの push で `publish.yml` が動き、npm へ公開されるため
+  指示があるときだけ行う。タグの push で `publish.yml` が動き、npm へ stage され、GitHub Releases が作られるため
 - **バージョン bump を自発的にしない。`npm version` も `package.json` の `version` の手での書き換えも
   しない。** 版は tagpr がリリース PR で上げる
 - **main へ直接 push しない。** ブランチを切って PR にする（後段「変更の入れ方」）
@@ -107,10 +107,15 @@ node -e 'import("./dist/index.js").then(m => console.log(m.rakuLanguage.parser.p
 
 **公開は tagpr のリリース PR をマージして始める。マージはユーザーの指示があるときだけ行う。**
 版上げ（`package.json` / `package-lock.json`）、CHANGELOG の見出し、タグはリリース PR と
-ワークフローが行う。npm へは `publish.yml` が Trusted Publishing（OIDC）で公開する。npm の
+ワークフローが行う。npm へは `publish.yml` が Trusted Publishing（OIDC）で stage し
+（`npm stage publish`）、**メンテナが 2FA 付きで approve したときに公開される。** npm の
 トークンはどこにも置かない（2026-11-10 にユーザーが決定）。
 
-動きの詳細と、落ちたときの扱いは `scripts/tagpr/README.md` の「The tagpr workflow」にある。
+`publish.yml` は kan/tagpr-scripts の共通の workflow（`publish-npm.yml`）を呼ぶだけで、ジョブを
+持たない。`scripts/tagpr/` と同じ commit で呼ぶ（`verify-subtree.mjs` が検査する）。
+
+動きの詳細と、落ちたときの扱いは `scripts/tagpr/README.md` の「The tagpr workflow」と
+「The npm publish workflow」にある。
 
 1. **リリース PR を確かめる**
 
@@ -135,17 +140,27 @@ node -e 'import("./dist/index.js").then(m => console.log(m.rakuLanguage.parser.p
    main への push のたびに作り直される）。見出しの日付は、最後に作り直した日（日本時間）
 3. **リリース PR をマージする**（squash）。マージの push で走る tagpr の run がマージコミットに
    タグを打ち、`publish.yml` をそのタグで起動する。**タグが打たれるまで main へ何もマージしない**
-4. **`publish.yml` の run が通ったことを確かめる。** npm（`npm view codemirror-lang-raku version`）と
-   GitHub Releases に新しい版があり、Releases の本文が CHANGELOG の節であること
+4. **`publish.yml` の run が通ったことを確かめる。** GitHub Releases に新しい版があり、本文が
+   CHANGELOG の節であること。Releases は approve を待たずに、stage の直後に作られる
+5. **stage した版を approve する。** run の Job Summary に stage ID が出る。approve は 2FA が
+   要るので、**ユーザーが行う**（エージェントは stage ID とコマンドを伝える）
 
-`publish.yml` は次の順に確かめてから公開する。どれかが成り立たなければ、npm へ出す前に止まる。
+   ```sh
+   npm stage view <stage ID>      # 中身を見る
+   npm stage approve <stage ID>   # 公開する
+   ```
 
-- タグが `package.json` の `version` と一致し、そのコミットが main にある
-- CHANGELOG に、その版の節がある（`scripts/tagpr/release-notes.mjs`）
-- `npm test` と `npm pack` が通る
+   approve したあと、`npm view codemirror-lang-raku version` が新しい版になったことを確かめる。
+   公開しないと決めたら `npm stage reject <stage ID>` で捨て、GitHub Releases の版を手で消す
 
-GitHub Releases は npm へ出したあとに作る。題は版の番号、本文は CHANGELOG のその版の節。
+`publish.yml` は stage の前に、タグと `package.json` の版、main の上にあるか、CHANGELOG の節、
+`npm test` と `npm pack` を確かめる。どれかが成り立たなければ、npm へ出す前に止まる。詳細は
+`scripts/tagpr/README.md` の「The npm publish workflow」にある。
+
+GitHub Releases の題はタグ（`vX.Y.Z`）、本文は CHANGELOG のその版の節。0.4.1 までは題が
+`v` の無い版の番号だった。
 `-` を含む版（`1.0.0-rc.1`）は、npm には dist-tag `next` で出し、Releases ではプレリリースにする。
+本文は `## [Unreleased]` の節になる（`release-notes.mjs`）。
 ただし、**プレリリースを出す手順は決めていない**（タグと `package.json` の版の一致を求めるので、
 main の版を rc にする必要があり、tagpr の版の計算と衝突する）。出したくなったらユーザーに相談する。
 
@@ -156,13 +171,18 @@ main の版を rc にする必要があり、tagpr の版の計算と衝突す�
 **どのやり直しも、原因と、何をするかをユーザーに報告してから行う。タグの削除と付け替えを
 自分の判断でしない。**
 
-- やり直す前に、`npm view codemirror-lang-raku@X.Y.Z version` で npm に出たかを見る。`publish`
-  ジョブが赤でも、npm には届いていることがある
-- `publish.yml` が npm へ出す前に落ちたら、原因を直してから `gh workflow run publish.yml --ref vX.Y.Z`
+- やり直す前に、npm に出たかを見る。approve の後なら `npm view codemirror-lang-raku@X.Y.Z version`。
+  **stage 済みで未承認の版は `npm view` に出ない**ので、`npm stage list codemirror-lang-raku` でも見る。
+  publish のジョブが赤でも、stage は済んでいることがある
+- `publish.yml` が stage の前に落ちたら、原因を直してから `gh workflow run publish.yml --ref vX.Y.Z`
   で起動し直す。原因がコードか CHANGELOG にあるときは、直した PR をマージしたうえでタグを
   打ち直す必要がある（`publish.yml` はタグの指すコミットで動く）
-- npm へは出て、`release` ジョブだけが落ちたら、`gh run rerun <run ID> --failed` で落ちたジョブ
-  だけをやり直す。**run 全体を再実行しない。** `publish` ジョブも走り、同じ版は公開できずに落ちる
+- stage のあとに Release を作るジョブだけが落ちたら、`gh run rerun <run ID> --failed` で落ちた
+  ジョブだけをやり直す。**approve の前に run 全体を再実行しない。** 未承認の版は `npm view` で
+  見えないので、もう一度 stage して registry に断られる。approve の後なら、npm にある版の
+  stage は飛ばされるので、run 全体の再実行でもよい
+- 原因が共通の workflow（`publish-npm.yml`）か `scripts/tagpr/` にあるときは、この repo で
+  直さず kan/tagpr-scripts に issue を立てる（run の URL、落ちたジョブとステップ、エラーの全文を添える）
 - tagpr の run がタグを打ったあとに落ちたときは、その run を再実行する。**`publish.yml` を
   すでに起動した tagpr の run は再実行しない**
 - **npm へ出た版は打ち直せない。** 同じ版は二度と公開できないので、次の版で直す
@@ -180,8 +200,10 @@ main の版を rc にする必要があり、tagpr の版の計算と衝突す�
 - GitHub の「Allow GitHub Actions to create and approve pull requests」を有効にしている。tagpr が
   GITHUB_TOKEN でリリース PR を作るのに要る
 - npm の `codemirror-lang-raku` に、Trusted Publisher として `kan/codemirror-lang-raku` の
-  `publish.yml` を登録している。**direct publish を許可しておく**（既定の「npm stage publish」
-  だけでは `403 OIDC permission denied` で落ちる）
+  `publish.yml` を登録している。**「npm stage publish」だけを許可し、direct publish は許さない**
+  （approve を経ずに公開されないようにするため。2026-11-21 までに切り替え済み）。stage publish を許していないと、stage が
+  `403 OIDC permission denied` で落ちる。登録は呼ぶ側のファイル名で見分けるので、**`publish.yml` の
+  名前を変えない**
 
 ---
 
@@ -205,8 +227,8 @@ main の版を rc にする必要があり、tagpr の版の計算と衝突す�
 | `demo/` | 動作確認用のページ。エディタと、その内容の構文木を並べて出す。npm には含めない |
 | `CHANGELOG.md` | 利用者向けの変更履歴（英語）。[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) の形。挙動か公開インターフェースを変えたら、`## [Unreleased]` の節に足す（「変更の入れ方」）。見出しの書き方は `scripts/tagpr/README.md` の「What the CHANGELOG has to look like」 |
 | `.tagpr` | tagpr の設定 |
-| `scripts/tagpr/` | [kan/tagpr-scripts](https://github.com/kan/tagpr-scripts) の `git subtree`。CHANGELOG の見出しの書き換え（`release-prepare.mjs`）と、版の節の取り出し（`release-notes.mjs`）。**ここを直接編集しない。** 直すときは tagpr-scripts を直し、`git subtree pull -S --prefix=scripts/tagpr https://github.com/kan/tagpr-scripts.git main --squash` で取り込み、同じ PR で `tagpr.yml` と `tagpr-label.yml` の `uses:` の SHA も上げる。食い違いは `test.yml` の `verify-subtree.mjs` が検出する |
-| `.github/workflows/` | `test.yml`（テスト）、`demo.yml`（デモの公開）、`tagpr.yml`（リリース PR とタグ）、`tagpr-label.yml`（ラベルを変えたらリリース PR を作り直す）、`publish.yml`（タグで npm へ公開し、GitHub Releases に登録） |
+| `scripts/tagpr/` | [kan/tagpr-scripts](https://github.com/kan/tagpr-scripts) の `git subtree`。CHANGELOG の見出しの書き換え（`release-prepare.mjs`）、版の節の取り出し（`release-notes.mjs`）、タグと版の検査（`release-tag.mjs`）。`tagpr.yml`、`tagpr-label.yml`、`publish.yml` が呼ぶ共通の workflow も、同じ commit のもの。**ここを直接編集しない。** 直すときは tagpr-scripts を直し、`git subtree pull -S --prefix=scripts/tagpr https://github.com/kan/tagpr-scripts.git main --squash` で取り込み、同じ PR で `tagpr.yml`、`tagpr-label.yml`、`publish.yml` の `uses:` の SHA も上げる。食い違いは `test.yml` の `verify-subtree.mjs` が検出する |
+| `.github/workflows/` | `test.yml`（テスト）、`demo.yml`（デモの公開）、`tagpr.yml`（リリース PR とタグ）、`tagpr-label.yml`（ラベルを変えたらリリース PR を作り直す）、`publish.yml`（タグで npm へ stage し、GitHub Releases に登録。共通の workflow を呼ぶだけ） |
 | `.github/workflows/actions.lock` | action の commit の固定。`gh actions-lock` が作り、`verify-lockfile.yml` が検査する。手で編集しない。`uses:` は完全な版のタグ（`@v7.0.1`）で書き、変えたら repo のルートで `gh actions-lock` を実行して、workflow と一緒にコミットする |
 
 **npm に入るのは `dist/index.*` だけ**（`package.json` の `files`）。`src/index.ts` が別ファイルの型を

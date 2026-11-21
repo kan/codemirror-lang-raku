@@ -12,8 +12,9 @@
 	# release's. scripts/tagpr/ is a git subtree of kan/tagpr-scripts.
 	changelog = false
 	postVersionCommand = node scripts/tagpr/release-prepare.mjs
-	# publish.yml creates the GitHub release after npm publish, so a release
-	# never exists for a version that failed to publish.
+	# publish.yml creates the GitHub release right after npm stage publish
+	# (before the approval), so a release never exists for a version that
+	# failed to be staged. A rejected stage leaves a release to delete by hand.
 	release = false
 	# A merged pull request labelled enhancement makes the release a minor one.
 	# Otherwise it is a patch, unless tagpr:minor / tagpr:major is put on the
