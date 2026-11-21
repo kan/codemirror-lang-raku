@@ -9,14 +9,50 @@ Program(StringLiteral, Operator, Number,
   VariableName, Operator, VariableName,
   VariableName, Operator, VariableName)
 
+# More word operators in operator position
+
+$a ff $b; $a fff $b; $a before $b; $a after $b; $a unicmp $b; $a coll $b; $a minmax $b
+
+==>
+
+Program(VariableName, Operator, VariableName, VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName, VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName, VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName)
+
+# Word operators after a subscript or a block
+
+%h{$k} x 3; %h{$k} min 2; { rand } xx 3; $a{1} (elem) $s; %h{1} Z+ @b; %h{1} Zmin @b
+
+==>
+
+Program(VariableName, Block(VariableName), Operator, Number,
+  VariableName, Block(VariableName), Operator, Number,
+  Block(Identifier), Operator, Number,
+  VariableName, Block(Number), Operator, VariableName,
+  VariableName, Block(Number), Operator, VariableName,
+  VariableName, Block(Number), Operator, VariableName)
+
+# A word operator on the line after a block is a name
+
+if 1 { }
+x 3;
+if 1 { }
+before 3;
+
+==>
+
+Program(if, Number, Block, Identifier, Number, if, Number, Block, Identifier, Number)
+
 # The same words in term position
 
-x => 1; max(1, 2); min 1, 2; my \x = 1
+x => 1; max(1, 2); min 1, 2; my \x = 1; before(1); my $after = 1; sub before { }
 
 ==>
 
 Program(Identifier, Operator, Number, Identifier, Parens(Number, Number),
-  Identifier, Number, Number, my, Operator, Identifier, Operator, Number)
+  Identifier, Number, Number, my, Operator, Identifier, Operator, Number,
+  Identifier, Parens(Number), my, VariableName, Operator, Number, RoutineDeclaration(sub, RoutineName, Block))
 
 # Zip, cross and reverse meta operators
 
@@ -31,14 +67,27 @@ Program(VariableName, Operator, VariableName,
   VariableName, Operator, VariableName,
   VariableName, Operator, VariableName)
 
+# Meta operators on word operators
+
+@a Zmin @b; @a Xeq @b; $a Rcmp $b; @a Zcmp @b; @a Rx 3; @a Xbefore @b
+
+==>
+
+Program(VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName,
+  VariableName, Operator, Number,
+  VariableName, Operator, VariableName)
+
 # Capitalized names are not meta operators
 
-X::AdHoc.new; Z-index; my X $x; R.new
+X::AdHoc.new; Z-index; my X $x; R.new; my Xeq $y; Zmin.new
 
 ==>
 
 Program(TypeName, MethodCall(MethodName), TypeName, my, TypeName, VariableName,
-  TypeName, MethodCall(MethodName))
+  TypeName, MethodCall(MethodName), my, TypeName, VariableName, TypeName, MethodCall(MethodName))
 
 # Reduction and hyper operators
 
@@ -66,6 +115,24 @@ Program(VariableName, Operator, Identifier,
   Identifier, VariableName,
   Identifier, VariableName,
   VariableName, Operator, VariableName)
+
+# A hash or code sigil after a lone sigil is a variable
+
+$%h; @%h; $&f; say $%h<a>
+
+==>
+
+Program(VariableName, VariableName, VariableName, Identifier, VariableName, StringLiteral)
+
+# Binding and lookups by name
+
+$x ::= 1; $y := 2; ::('Foo').new; PROCESS::<$OUT>; Foo::Bar::
+
+==>
+
+Program(VariableName, Operator, Number, VariableName, Operator, Number,
+  "::", Parens(StringLiteral), MethodCall(MethodName),
+  TypeName, "::", StringLiteral, TypeName, "::")
 
 # A hash or code variable after its type
 

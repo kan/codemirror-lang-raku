@@ -56,6 +56,14 @@ $a-1
 
 Program(VariableName, Operator, Number)
 
+# A name that is looked up from the outside in
+
+$::x, @::y, $::Foo::bar, 1
+
+==>
+
+Program(VariableName, VariableName, VariableName, Number)
+
 # Qualified names
 
 $Foo::bar @*Foo::baz Foo::Bar::baz

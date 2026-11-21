@@ -95,7 +95,7 @@ const baseLanguage = LRLanguage.define({
         Operator: t.operator,
         ".": t.derefOperator,
         ", ;": t.separator,
-        ":": t.punctuation,
+        ": ::": t.punctuation,
         "( )": t.paren,
         "[ ]": t.squareBracket,
         "{ }": t.brace

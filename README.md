@@ -88,16 +88,16 @@ on incomplete code.
 |---|---|
 | `PackageDeclaration` | `class`, `role`, `grammar`, `module`, `package`, with a `PackageName` child, up to the body `Block` or the `;` of a `unit` declaration |
 | `RoutineDeclaration` | `sub`, `method`, `submethod`, with a `RoutineName` child (absent for anonymous routines), up to the body `Block`. Also the `foo(…) { }` of `multi foo(…) { }`, which declares a sub without the word `sub`: that node starts with its `RoutineName` |
-| `RegexDeclaration` | `token`, `rule`, `regex`, with a `RegexName` child, up to the body `Block`, which holds one `Regex`. The name includes a `:sym<…>`, with the blanks before it if there are any (`word :sym<long>`) |
+| `RegexDeclaration` | `token`, `rule`, `regex`, with a `RegexName` child, up to the body `Block`, which holds one `Regex`. The name includes a `:sym<…>`, with the blanks before it if there are any (`word :sym<long>`), and the brackets in it (`infix:sym<{ }>`) |
 | `EnumDeclaration`, `SubsetDeclaration`, `ConstantDeclaration` | The declarator and its `EnumName`, `SubsetName` or `ConstantName`. The name of a constant includes its sigil if it has one (`constant $LIMIT`). A constant without a sigil that is declared with a backslash (`constant \x`) has no `ConstantName` |
 | `Block`, `Parens`, `Brackets` | `{ }`, `( )`, `[ ]` |
 | `VariableName`, `AttributeName`, `SpecialVariable` | `$x` / `$^a`, `$!x` / `$.x`, `$*x` / `$?x`. An operator that is referred to as a routine is one `VariableName`: `&infix:<+>`, `&[+]` |
-| `Identifier`, `TypeName` | A bare name (`say`, `my-sub`), and a capitalized one (`Int`, `Foo::Bar`), with its smiley if it has one (`Int:D`) |
+| `Identifier`, `TypeName` | A bare name (`say`, `my-sub`), and a capitalized one (`Int`, `Foo::Bar`, the type capture `::T`, `::?CLASS`), with its smiley if it has one (`Int:D`) |
 | `MethodCall` | The `.` and the `MethodName` of `.name`, `.?name` and the like. The arguments are the `Parens` after it |
 | `PairKey` | `:key`, `:!key`. The value is the node after it |
 | `Number`, `Version` | `42`, `1.5e3`, `0x1F`, `:16<FF>`, `½`, `∞`, and `v6.d` |
 | `True`, `False`, `Nil` | These three words |
-| `Operator` | An operator made of symbols, a word operator where an operator is expected (`x`, `min`, `Z+`), a set operator in parentheses (`(elem)`) |
+| `Operator` | An operator made of symbols, a word operator where an operator is expected (`x`, `min`, `before`, `Z+`, `Zmin`), a set operator in parentheses (`(elem)`) |
 | `StringLiteral` | A quote of any kind. One that interpolates has `Escape`, `Interpolation`, variable, `Brackets`, `Parens` and `MethodCall` children, and a `NestedDelimiters` for each pair of its own delimiters in it (the `[b]` of `qq[a [b] c]`) |
 | `Heredoc` | The text of a heredoc, from the line after its `q:to/END/` opener through its terminator. The opener is a `StringLiteral`. The text of a `qq:to` heredoc has the same children as a string that interpolates. The texts of the heredocs that one line opens are a single node |
 | `Regex` | `/…/`, `rx//`, `m//`, `s///`, `tr///`, or the body of a regex declaration. Its children are `CharacterClass` (`<[a..z]>`), `Assertion` (`<name>`, `<?before …>`), `StringLiteral`, `Escape` (`\d`), `Operator` (quantifiers, `\|`, anchors), `VariableName` (`$x`, `$<name>`), `LineComment`, `BlockComment`, and a `Block` for each `{ }` of code |
@@ -225,7 +225,9 @@ Heuristics that can be wrong:
   The built-in terms `pi`, `π`, `tau`, `τ`, `now`, `time` and `rand` are
   followed by an operator whatever the spacing (`pi /2`), also when a
   routine of your own has one of these names. After a closing brace, a
-  line break decides.
+  line break decides. After the value of a pair in angles, as in
+  `:ver<1>`, spacing decides as after a name, so that the import list of
+  `use Foo:ver<1> <a b>` is a word list.
 - A `<…>` right after a term is a subscript only when it holds plain words
   on one line: `%h<key>`, but not `$a<$b`, nor a key with a quote or
   other punctuation in it (`%h<a"b>`). A `<<…>>` or `«…»` that touches
