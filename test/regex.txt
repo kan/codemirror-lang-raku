@@ -406,3 +406,63 @@ my $r=/"a"/; say "x";
 ==>
 
 Program(my, VariableName, Operator, Regex(StringLiteral), Identifier, StringLiteral)
+
+# An apostrophe in a name in the code of a regex starts no quote
+
+ok 'a' ~~ / { don't() } /; f 'b';
+ok 'a' ~~ m{ a { don't() } }; f 'b';
+ok 'a' ~~ / x <?{ it's() }> /; f 'b';
+ok 'a' ~~ m{ x <?{ it's() }> }; f 'b';
+ok 'a' ~~ / :my $x = don't; x /; f 'b';
+
+==>
+
+Program(Identifier, StringLiteral, Operator, Regex(Block(Identifier, Parens)), Identifier, StringLiteral,
+  Identifier, StringLiteral, Operator, Regex(Block(Identifier, Parens)), Identifier, StringLiteral,
+  Identifier, StringLiteral, Operator, Regex(Assertion), Identifier, StringLiteral,
+  Identifier, StringLiteral, Operator, Regex(Assertion), Identifier, StringLiteral,
+  Identifier, StringLiteral, Operator, Regex(VariableName), Identifier, StringLiteral)
+
+# An apostrophe in the name of an assertion starts no quote
+
+ok 'a' ~~ /<it's>/; f 'b';
+ok 'a' ~~ / <.it's> <?before don't> <foo(don't)> 'c' /; f 'b';
+ok 'a' ~~ /<[a]+it's> 'c'/; f 'b';
+ok 'a' ~~ / <foo=it's> 'c' /; f 'b';
+token t { <it's> 'c' }
+
+==>
+
+Program(Identifier, StringLiteral, Operator, Regex(Assertion), Identifier, StringLiteral,
+  Identifier, StringLiteral, Operator, Regex(Assertion, Assertion, Assertion, StringLiteral), Identifier, StringLiteral,
+  Identifier, StringLiteral, Operator, Regex(CharacterClass, StringLiteral), Identifier, StringLiteral,
+  Identifier, StringLiteral, Operator, Regex(Assertion, StringLiteral), Identifier, StringLiteral,
+  RegexDeclaration(token, RegexName, Block(Regex(Assertion, StringLiteral))))
+
+# A heredoc that a block of code in a regex declaration opens
+
+token a { { Q:to<E> }
+hi
+E
+x }
+say 1;
+token b { { qq:to<E> } x
+$y
+E
+}
+say 2;
+
+==>
+
+Program(RegexDeclaration(token, RegexName, Block(Regex(Block(StringLiteral), Heredoc))), Identifier, Number,
+  RegexDeclaration(token, RegexName, Block(Regex(Block(StringLiteral), Heredoc(VariableName)))), Identifier, Number)
+
+# A heredoc that a block of code in a regex declaration opens, without a terminator
+
+token a { { Q:to<E> }
+x }
+say 1;
+
+==>
+
+Program(RegexDeclaration(token, RegexName, Block(Regex(Block(StringLiteral)))), Identifier, Number)

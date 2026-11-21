@@ -155,6 +155,15 @@ say @<names>.elems, $<a_capture_with_a_long_name and_another>;
 say %count{$key} x 2, %count{'two'} min 3, 'a' before 'b', @words Zmin @words, $%count, $::key;
 say ::('Log::Parse::Line').^name, PROCESS::<$OUT>.^name;
 
+# An apostrophe in a name in a regex, and a heredoc that a block of
+# code in a regex declaration opens.
+say 'it is' ~~ / { don't() } <it's> /, 'the end';
+my token aside { { note Q:to<END> }
+    a note
+    END
+    x }
+say 'aside';
+
 =finish
 
 Anything after =finish is documentation: { ' " /

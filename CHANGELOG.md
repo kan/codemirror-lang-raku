@@ -91,6 +91,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   around the variable. A word that the document does not declare as a
   type is still taken for a call after a `my` that is being typed on the
   line above it.
+- In a regex, an apostrophe in a name no longer starts a quote, in a
+  block of code (`/ { don't() } /`) or in an assertion (`/<it's>/`). The
+  regex used to run on past its closing delimiter, and a quote after it
+  turned the rest of the line inside out. A block of code in a regex in
+  braces is read as code too: `m{ a { don't() } }`.
+- The text of a heredoc that a block of code in a regex declaration
+  opens starts on the next line, as in code: `token a { { Q:to/END/ } … }`.
+  It used to start after the declaration, and took the code there for
+  its text.
 
 ### Performance
 
