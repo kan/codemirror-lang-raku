@@ -49,7 +49,7 @@
     "@codemirror/state": "^6.0.0",
     "@lezer/common": "^1.0.0",
     "@lezer/highlight": "^1.0.0",
-    "@lezer/lr": "^1.0.0"
+    "@lezer/lr": "^1.4.12"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "^6.20.3",

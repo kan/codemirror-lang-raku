@@ -411,9 +411,11 @@ function heredocsAfter(node: Tree, input: InputStream, before: readonly OpenHere
   // Most reused nodes are single tokens.
   if (!node.children.length && !stringTerms.has(node.type.id) && !heredocTerms.has(node.type.id)) return before
   let cursor = node.cursor(), found: {pos: number, heredoc: OpenHeredoc}[] = [], closedAt = -1
-  // Goes over the node at the cursor from its end, and tells whether
-  // the heredocs before some point in it are closed.
+  // Goes over the node at the cursor, and tells whether the heredocs
+  // before some point in it are closed. It sets `closedAt` to the last
+  // such point in the node, or to -1.
   function scan(text = false): boolean {
+    closedAt = -1
     let type = cursor.type.id, {from, to} = cursor
     if (heredocTerms.has(type)) { closedAt = to; return true }
     let isString = stringTerms.has(type)
@@ -424,15 +426,32 @@ function heredocsAfter(node: Tree, input: InputStream, before: readonly OpenHere
     // The tree of the inside of a regex literal or of a word list. It
     // was one token when it was shifted, which opens no heredoc.
     if (type == Regex || type == StringLiteral) return false
-    if (!cursor.lastChild()) return false
     // Between the pieces of a string lies its text, not whitespace.
-    let gaps = !isString && !text && type != NestedDelimiters
+    if (isString || text || type == NestedDelimiters) {
+      // Nothing between the pieces closes the heredocs, so there is no
+      // point at which a walk from the end could stop. The children are
+      // gone over from the start instead, as going back to the previous
+      // one in a buffer is a search from its start. The last child that
+      // closes the heredocs sets the point.
+      if (!cursor.firstChild()) return false
+      let last = -1
+      do {
+        if (scan()) last = closedAt
+      } while (cursor.nextSibling())
+      closedAt = last
+      cursor.parent()
+      return closedAt >= 0
+    }
+    // Between the children of anything else lie tokens, and a line
+    // break there closes the heredocs, so the walk goes from the end and
+    // stops at the last one.
+    if (!cursor.lastChild()) return false
     for (let gapEnd = to;;) {
-      if (gaps && hasNewline(input, cursor.to, gapEnd)) { closedAt = gapEnd; break }
+      if (hasNewline(input, cursor.to, gapEnd)) { closedAt = gapEnd; break }
       if (scan()) break
       gapEnd = cursor.from
       if (!cursor.prevSibling()) {
-        if (gaps && hasNewline(input, from, gapEnd)) closedAt = gapEnd
+        if (hasNewline(input, from, gapEnd)) closedAt = gapEnd
         break
       }
     }
