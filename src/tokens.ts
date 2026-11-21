@@ -2,6 +2,7 @@ import {ContextTracker, ExternalTokenizer, InputStream, Stack} from "@lezer/lr"
 import {Tree, SyntaxNode} from "@lezer/common"
 import {
   BlockComment, DocComment, LineComment, Pod, Heredoc, rawHeredoc, interpolatingHeredoc, heredocStart,
+  heredocElement, interpolatingHeredocElement,
   podStart, podEnd, podEndDirective, podText, PodDirective, PodHeading, PodStrong, PodEmphasis, PodCode, PodLink,
   PodFormat,
   MethodName, Version, regexLiteral, Regex, transliteration, Operator, Number as NumberTerm, radixNumber, PairKey,
@@ -386,7 +387,7 @@ const startContext = new Context(Mode.Term, null, noHeredocs, null, null)
 
 // The tokens of the text of a heredoc, and the tree of its inside,
 // which takes the place of the token of one that interpolates.
-const heredocTerms = new Set([rawHeredoc, interpolatingHeredoc, Heredoc])
+const heredocTerms = new Set([rawHeredoc, interpolatingHeredoc, heredocElement, interpolatingHeredocElement, Heredoc])
 
 const skippedTerms = new Set([LineComment, DocComment, BlockComment, ...heredocTerms, Pod, podStart, podEnd, podEndDirective,
                               podText, PodDirective, PodHeading, PodStrong, PodEmphasis, PodCode, PodLink, PodFormat])
@@ -527,7 +528,7 @@ function modeAfterNode(top: SyntaxNode, input: InputStream, before: Mode): Mode 
 export const trackContext = new ContextTracker<Context>({
   start: startContext,
   shift(context, term, stack, input) {
-    if (term == rawHeredoc || term == interpolatingHeredoc) return context.withHeredocs(noHeredocs)
+    if (heredocTerms.has(term)) return context.withHeredocs(noHeredocs)
     // The text of a heredoc that interpolates is read by a parser of
     // its own, as a quote without delimiters.
     if (term == heredocStart) return context.withQuote(Mode.Term, heredocQuote)
@@ -1547,6 +1548,14 @@ export const quoteToken = new ExternalTokenizer((input, stack) => {
 // which is parsed again (see index.ts), from an empty token that puts
 // the quote in the context. When a line opens several heredocs, their
 // texts are one token, which interpolates if all of them do.
+//
+// Where an element can stand, the text is an element, and is skipped
+// elsewhere, as between a signature and its body. @lezer/common gives
+// every run of elements in a repeat the context hash at the end of the
+// last element of the repeat, and reuses a run only where the hash is
+// the same. A skipped text is no element, so a repeat whose last line
+// opened a heredoc used to end with the heredoc still open, and none of
+// its runs were reused (issue 33).
 export const heredocToken = new ExternalTokenizer((input, stack) => {
   if (context(stack) == startContext && stack.canShift(heredocStart)) return input.acceptToken(heredocStart)
   let {heredocs} = context(stack)
@@ -1566,8 +1575,12 @@ export const heredocToken = new ExternalTokenizer((input, stack) => {
       skipLine(input)
     }
   }
-  input.acceptToken(heredocs.every(heredoc => heredoc.interpolates) ? interpolatingHeredoc : rawHeredoc)
-})
+  let interpolates = heredocs.every(heredoc => heredoc.interpolates)
+  let element = interpolates ? interpolatingHeredocElement : heredocElement
+  input.acceptToken(stack.canShift(element) ? element : interpolates ? interpolatingHeredoc : rawHeredoc)
+  // Contextual: which of the terms it is depends on the stack, and two
+  // stacks with the same context can be at the same text.
+}, {contextual: true})
 
 const regexDeclarator = /^(token|rule|regex)$/
 const regexDeclaratorPrefix = /^(proto|multi|my|our)$/

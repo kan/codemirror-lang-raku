@@ -1,5 +1,5 @@
 import {parser as grammarParser} from "./syntax.grammar"
-import {regexLiteral, interpolatingHeredoc, interpolatingWordList} from "./syntax.grammar.terms"
+import {regexLiteral, interpolatingHeredoc, interpolatingHeredocElement, interpolatingWordList} from "./syntax.grammar.terms"
 import {LRParser} from "@lezer/lr"
 import {parseMixed} from "@lezer/common"
 import {LRLanguage, LanguageSupport, indentNodeProp, foldNodeProp, foldInside, delimitedIndent} from "@codemirror/language"
@@ -25,7 +25,9 @@ function nestedParsers(base: LRParser) {
   // The inner parsers are wrapped as well: a regex can hold a block of
   // code, and that can hold a regex.
   parsers.set(regexLiteral, {parser: base.configure({top: "Regex", wrap})})
-  parsers.set(interpolatingHeredoc, {parser: base.configure({top: "Heredoc", wrap})})
+  let heredoc = {parser: base.configure({top: "Heredoc", wrap})}
+  parsers.set(interpolatingHeredoc, heredoc)
+  parsers.set(interpolatingHeredocElement, heredoc)
   parsers.set(interpolatingWordList, {parser: base.configure({top: "StringLiteral", wrap})})
   return wrap
 }

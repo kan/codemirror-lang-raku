@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - After an edit, what follows a prefix `++` or `--` could be read
   differently than in a parse from scratch: the name in `++x` could
   become an operator.
+- After an edit that makes a heredoc's opener no longer open it, the
+  text of the heredoc stays a heredoc less often: in a test with 1,170
+  such edits, 3 of them, down from 18. Which edits do it has changed, so
+  a few that used to be read right now are not. See Known limitations in
+  the README.
 - Completion offers the variables that are declared with a native type
   or a coercion type, as in `my int @a`, `my num $n` and
   `my Foo(Str) $x`, and offers nothing for the variable that such a
@@ -33,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- Reparsing after an edit reuses the rest of the document when the last
+  statement of the document, or of a large block, opens a heredoc. Such a
+  document used to be parsed from scratch after every edit: a 1-character
+  edit in about 100 KB took about 50 ms, and takes about 1 ms. Documents
+  with many heredocs gain as well: in about 95 KB with a heredoc every
+  7 lines, an edit takes under 1 ms, down from about 8 ms.
 - Reparsing after an edit is faster in a huge quote: a 1-character edit
   in a `"…"` or `qq[…]` of about 200 KB takes 55–70% of the time it did.
 - The first completion after an edit no longer gathers the names of the

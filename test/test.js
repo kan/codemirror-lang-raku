@@ -280,6 +280,28 @@ function tokens(tree) {
   return tokenList(tree).map(t => `${t.name}@${t.from}-${t.to}`).join(" ")
 }
 
+// The index of the first token that differs between two token lists.
+function firstDifference(a, b) {
+  let i = 0
+  while (i < a.length && i < b.length && a[i].name == b[i].name && a[i].from == b[i].from && a[i].to == b[i].to) i++
+  return i
+}
+
+// The nodes and buffers of a tree, to tell which of them a later tree reused.
+function nodesOf(tree) {
+  let nodes = new Set()
+  let collect = node => { nodes.add(node); if (node instanceof Tree) node.children.forEach(collect) }
+  collect(tree)
+  return nodes
+}
+
+// The tree of `doc`, parsed again from `old` after `length` characters
+// were inserted at `at`.
+function reparseAfterInsert(old, doc, at, length) {
+  return rakuLanguage.parser.parse(doc, TreeFragment.applyChanges(TreeFragment.addTree(old),
+                                                                  [{fromA: at, toA: at, fromB: at, toB: at + length}]))
+}
+
 // @lezer/lr reuses a node of the old tree even when it holds the
 // recovery from a syntax error, and does not run the recovery again.
 // That recovery was chosen for the parse stack of the old document. A
@@ -290,9 +312,7 @@ function tokens(tree) {
 // two trees starts. A difference that starts anywhere else still fails.
 // Returns whether all the tokens are the same.
 function assertSameTokensUpToError(incremental, full, message) {
-  let a = tokenList(incremental), b = tokenList(full), i = 0
-  let same = (x, y) => x.name == y.name && x.from == y.from && x.to == y.to
-  while (i < a.length && i < b.length && same(a[i], b[i])) i++
+  let a = tokenList(incremental), b = tokenList(full), i = firstDifference(a, b)
   if (i == a.length && i == b.length) return true
   let at = Math.min(a[i] ? a[i].from : Infinity, b[i] ? b[i].from : Infinity), atError = false
   for (let tree of [incremental, full]) tree.iterate({enter(node) {
@@ -355,6 +375,38 @@ describe("incremental parsing", () => {
     // A difference with no error where it starts still fails.
     assert.throws(() => assertSameTokensUpToError(parser.parse("say 1;"), parser.parse("say x;"), "no error"),
                   assert.AssertionError)
+  })
+
+  // Issue 29, a known limitation. Commenting out the opener of the
+  // fourth `say #`{ … } q:to"END";` leaves a run of elements of the old
+  // tree that starts with the text of its heredoc to be reused, so the
+  // text stays where a full parse reads code. Few of the openers do
+  // this, and which ones depends on where the runs end: pick another one
+  // when heredocs.raku changes (see AGENTS.md). It takes a change to
+  // @lezer/common. When the tokens no longer differ, this case can check
+  // that they are the same.
+  it("keeps the text of a heredoc whose opener an edit took away (issue 29)", () => {
+    let parser = rakuLanguage.parser
+    let prev = fs.readFileSync(path.join(caseDir, "fixtures", "heredocs.raku"), "utf8").repeat(6), at = -1
+    for (let n = 0; n < 4; n++) at = prev.indexOf("say #`{", at + 1)
+    let doc = prev.slice(0, at) + "# " + prev.slice(at), old = parser.parse(prev)
+    let incremental = reparseAfterInsert(old, doc, at, 2)
+    let a = tokenList(incremental), b = tokenList(parser.parse(doc)), i = firstDifference(a, b)
+    assert.ok(i < a.length || i < b.length, "the case no longer makes the tokens differ")
+    // The first token that differs is the old text, and a node of the old
+    // tree that was reused starts with it.
+    let text = i < a.length ? incremental.resolveInner(a[i].from, 1) : null
+    while (text && text.name != "Heredoc") text = text.parent
+    assert.ok(text, "the tokens differ outside the text of a heredoc: pick another opener (see AGENTS.md)")
+    let nodes = nodesOf(old), reused = false
+    let find = (node, start) => {
+      if (start == text.from && nodes.has(node)) reused = true
+      else if (node instanceof Tree && start <= text.from && start + node.length > text.from)
+        node.children.forEach((child, k) => find(child, start + node.positions[k]))
+    }
+    find(incremental, 0)
+    assert.strictEqual(text.from, at + 2 + prev.slice(at).indexOf("\n"))
+    assert.ok(reused)
   })
 
   // The line breaks in the text of a quote are not the ones between
@@ -473,6 +525,43 @@ describe("incremental parsing of heredocs", () => {
       let fragments = TreeFragment.applyChanges(TreeFragment.addTree(parser.parse(base)),
                                                 [{fromA: from, toA: to, fromB: from, toB: from + insert.length}])
       assert.strictEqual(tokens(parser.parse(doc, fragments)), tokens(parser.parse(doc)))
+    })
+  }
+
+  // The characters of `tree` that are not in a node of `old`, which the
+  // parse that made `tree` read again.
+  function readAgain(old, tree) {
+    let nodes = nodesOf(old), fresh = 0
+    let walk = node => {
+      if (nodes.has(node)) return
+      if (!(node instanceof Tree) || !node.children.length) { fresh += node.length; return }
+      let covered = 0
+      node.children.forEach(child => { covered += child.length; walk(child) })
+      fresh += node.length - covered
+    }
+    walk(tree)
+    return fresh
+  }
+
+  // @lezer/common gives each run of reused elements the context hash at
+  // the end of the last element of their repeat. When the text of a
+  // heredoc was always skipped, a repeat whose last line opens a heredoc
+  // ended with the heredoc still open, which kept every run from being
+  // reused (issue 33).
+  for (let [name, code] of [
+    ["the last statement of the document", filler.repeat(20) + "say q:to/END/;\n  text\n  END\n"],
+    ["the last statement of a block", "sub big {\n" + filler.repeat(20) + "  say q:to/END/;\n  text\n  END\n}\n"],
+    ["the last statement, with an interpolating text", filler.repeat(20) + "say qq:to/END/;\n  $text\n  END\n"],
+    ["the last line, with code after the opener", filler.repeat(20) + "say q:to/END/, 1; # note\n  text\n  END\n"]
+  ]) {
+    it(`reuses the tree when ${name} opens a heredoc`, () => {
+      let parser = rakuLanguage.parser, at = code.indexOf("say $a", code.length >> 1)
+      let doc = code.slice(0, at) + "x" + code.slice(at)
+      let old = parser.parse(code)
+      let tree = reparseAfterInsert(old, doc, at, 1)
+      assert.strictEqual(tokens(tree), tokens(parser.parse(doc)))
+      let fresh = readAgain(old, tree)
+      assert.ok(fresh < doc.length / 3, `read ${fresh} of ${doc.length} characters again`)
     })
   }
 })

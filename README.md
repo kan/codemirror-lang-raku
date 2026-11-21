@@ -135,6 +135,11 @@ Not supported yet:
   highlighted inside. When a line opens several heredocs, they are
   interpolated only if all of them are. A `{` that is not closed in the
   text takes the rest of the heredoc, with its terminator, for code.
+- After an edit that makes a heredoc's opener no longer open it, such as
+  commenting out its line, the text of the heredoc can stay a heredoc
+  instead of turning back into code. An edit in the text, or in the code
+  shortly after it, makes it code again, as a parse from scratch reads
+  it. This takes a fix in `@lezer/common`.
 - In Pod, a formatting code is one token: the codes inside it
   (`B<I<…>>`) are not told apart. Formatting codes are left alone in a
   block that is code (`=begin code`, `=code`, `=for code`), but not in a
