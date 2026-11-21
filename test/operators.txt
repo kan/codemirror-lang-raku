@@ -168,3 +168,61 @@ Program(
   RoutineDeclaration(sub, RoutineName, Parens(VariableName), Block(VariableName, Operator, Number)),
   RoutineDeclaration(sub, RoutineName, Parens(VariableName), Block(VariableName, Operator, Number)),
   VariableName, VariableName)
+
+# Operators that hold a slash or an angle stay whole
+
+$a/$b; $a//$b; $a/=2; $a//=2; $a<$b; $a<=$b; $a<=>$b; @a<==@b; [<] @a; [//] @a;
+$a%%2; $a~~$b; $a!~~$b; $a=:=$b; $a===$b; $a=~=$b
+
+==>
+
+Program(VariableName, Operator, VariableName, VariableName, Operator, VariableName,
+  VariableName, Operator, Number, VariableName, Operator, Number,
+  VariableName, Operator, VariableName, VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName, VariableName, Operator, VariableName,
+  Brackets(Operator), VariableName, Brackets(Operator), VariableName,
+  VariableName, Operator, Number, VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName, VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName, VariableName, Operator, VariableName)
+
+# Hyper operators, also as prefixes, stay whole
+
+@a>>+<<@b; @a»+«@b; @a«+»@b; @a>>/<<@b; -<<@a; -«@a
+
+==>
+
+Program(VariableName, Operator, VariableName, VariableName, Operator, VariableName,
+  VariableName, Operator, VariableName, VariableName, Operator, VariableName,
+  Operator, VariableName, Operator, VariableName)
+
+# Shifts and not-less-than stay whole after a term
+
+$a+<2; $a+>2; $a~<2; $a~>2; $a!<$b; $a!<=$b; $a+<=2; first +< 64; $x +<a b>
+
+==>
+
+Program(VariableName, Operator, Number, VariableName, Operator, Number,
+  VariableName, Operator, Number, VariableName, Operator, Number,
+  VariableName, Operator, VariableName, VariableName, Operator, VariableName,
+  VariableName, Operator, Number, Identifier, Operator, Number,
+  VariableName, Operator, Identifier, Identifier, Operator)
+
+# Division and comparison after a postfix operator or a whatever star with no space
+
+$i++/2; map(*/2); $i--<5 and foo > 1; grep(*<5 and foo > 1)
+
+==>
+
+Program(VariableName, Operator, Operator, Number, Identifier, Parens(Operator, Operator, Number),
+  VariableName, Operator, Number, and, Identifier, Operator, Number,
+  Identifier, Parens(Operator, Number, and, Identifier, Operator, Number))
+
+# A hyper prefix after an infix, and triangular reductions, stay whole
+
+$a=-<<@b; say $x >> 1; @a=-«@b; [\<] @a; [\<=] @a; [\/] @a
+
+==>
+
+Program(VariableName, Operator, VariableName, Identifier, VariableName, Operator, Number,
+  VariableName, Operator, VariableName,
+  Brackets(Operator), VariableName, Brackets(Operator), VariableName, Brackets(Operator), VariableName)

@@ -107,6 +107,19 @@ function isOperatorChar(ch: number) {
     ch == Ch.Bang || ch == Ch.Question || ch == Ch.Percent || ch == Ch.Amp
 }
 
+// Keep these in sync with operatorChar in syntax.grammar: the characters
+// that a run of them makes one Operator token of.
+function isOperatorRunChar(ch: number) {
+  if (ch < 0x80)
+    return ch == Ch.Plus || ch == Ch.Hyphen || ch == Ch.Star || ch == Ch.Slash || ch == Ch.Tilde || ch == Ch.Caret ||
+      ch == Ch.Pipe || ch == Ch.Less || ch == Ch.Greater || ch == Ch.Equals || ch == Ch.Bang || ch == Ch.Question ||
+      ch == Ch.Backslash
+  return ch >= 0xa1 && ch <= 0xa9 || ch == 0xab || ch == 0xac || ch >= 0xae && ch <= 0xb1 || ch == 0xb4 ||
+    ch >= 0xb6 && ch <= 0xb8 || ch == 0xbb || ch == 0xbf || ch == 0xd7 || ch == 0xf7 ||
+    ch >= 0x2010 && ch <= 0x2017 || ch >= 0x2020 && ch <= 0x2027 || ch >= 0x2030 && ch <= 0x205e ||
+    ch >= 0x2190 && ch <= 0x2bff
+}
+
 // Whether the character at offset `pos` would continue a name that ends
 // right before it.
 function continuesName(input: InputStream, pos: number) {
@@ -347,8 +360,10 @@ function modeAfterChar(first: number) {
 const termWords = /^(pi|π|tau|τ|now|time|rand)$/
 
 // The mode after the token of the given term at the input's position.
-// `before` is the mode before it.
-function modeAfter(term: number, input: InputStream, offset: number, before: Mode) {
+// `before` is the mode before it, and `size` the token's length, which
+// only an operator needs: one can be cut short of the operator
+// characters after it, as the `*` of `*/2` and the `++` of `$i++/2`.
+function modeAfter(term: number, input: InputStream, offset: number, before: Mode, size = 0) {
   // A term that takes no arguments is followed by an operator: pi /2
   if (term == Identifier) {
     let end = nameEnd(input, offset)
@@ -359,7 +374,7 @@ function modeAfter(term: number, input: InputStream, offset: number, before: Mod
   if (mode != null) return mode
   let first = input.peek(offset)
   if (term == Operator || term == wordOperator)
-    return modeAfterOperator(first, input.peek(offset + 1), input.peek(offset + 2), before)
+    return modeAfterOperator(first, size > 1 ? input.peek(offset + 1) : -1, size > 2 ? input.peek(offset + 2) : -1, before)
   return modeAfterChar(first)
 }
 
@@ -503,14 +518,15 @@ function modeAfterNode(top: SyntaxNode, input: InputStream, before: Mode): Mode 
     token = tokenBefore(token, top)
   }
   // The node's positions count from its start, where the input is.
-  let mode = token ? modeAfter(token.type.id, input, token.from, before) : before
-  for (let i = operators.length - 1; i >= 0; i--) mode = modeAfter(operators[i].type.id, input, operators[i].from, mode)
+  let mode = token ? modeAfter(token.type.id, input, token.from, before, token.to - token.from) : before
+  for (let i = operators.length - 1; i >= 0; i--)
+    mode = modeAfter(operators[i].type.id, input, operators[i].from, mode, operators[i].to - operators[i].from)
   return mode
 }
 
 export const trackContext = new ContextTracker<Context>({
   start: startContext,
-  shift(context, term, _stack, input) {
+  shift(context, term, stack, input) {
     if (term == rawHeredoc || term == interpolatingHeredoc) return context.withHeredocs(noHeredocs)
     // The text of a heredoc that interpolates is read by a parser of
     // its own, as a quote without delimiters.
@@ -565,7 +581,8 @@ export const trackContext = new ContextTracker<Context>({
       return context
     }
     if (term == rawString) context = context.withHeredocs(withHeredocAt(context.heredocs, input, 0))
-    return context.withMode(modeAfter(term, input, 0, context.mode))
+    // The input is at the start of the token, and the stack at its end.
+    return context.withMode(modeAfter(term, input, 0, context.mode, stack.pos - input.pos))
   },
   reduce(context, term, _stack, input) {
     // The input is at the start of the node that is reduced.
@@ -1264,6 +1281,63 @@ function isWordOperator(name: string) {
   return name == "x" || name == "xx" || name == "min" || name == "max" || name == "Z" || name == "X"
 }
 
+// The length of the operator at the start of a run of operator
+// characters that a term follows in the same run: the `=` of
+// `@a=<a b>`, the `!` of `!/x/`, the `~~` of `$s ~~/x/`. Zero when the
+// run is one operator, which the grammar's Operator token reads. What
+// follows is not looked at: whether it is a term is for the tokenizers
+// to find out from where it starts, as they do after a space.
+//
+// After a term, the run starts with an infix, and a term follows it.
+// In term position, it starts with prefixes, and a term follows them.
+// Not split are:
+// - the hyper operators: >>+<<, »+«, <<+>>, «+», >>/<<
+// - a run that starts with `<`, which no term follows: <=, <==, </
+// - `//` and `//=`
+// - the infixes +<, ~< and !< (left shifts and not-less-than), and the
+//   assignments made of them, after a term: in `$a +<b>`, Raku reads
+//   the infix too. In term position, a space or `=` after them tells
+//   that a sigilless name was a term: `first +< 64`
+// - a prefix with double angles, which make it a hyper: -<<@a, -«@a,
+//   also after an infix: $a=-<<@b. After a term, double angles are a
+//   word list only right after an infix of one character or one that
+//   ends in `=`: @a=«a b», $a==<<a b>>
+// - a `<` that no word follows, after a whatever star or a postfix
+//   `++` or `--`: in `*<5 and $x > 1`, the `<` compares. One that a
+//   word follows starts a subscript: *<key>
+// - a run that starts with `\`, as in the triangular reductions [\<]
+//   and [\/]
+function operatorHeadEnd(input: InputStream, termPosition: boolean) {
+  let first = input.next
+  if (first == Ch.Less || first == Ch.GuillemetOpen || first == Ch.GuillemetClose || first == Ch.Backslash ||
+      first == Ch.Greater && input.peek(1) == first) return 0
+  for (let pos = 1;; pos++) {
+    let ch = input.peek(pos), before = input.peek(pos - 1)
+    if (!isOperatorRunChar(ch)) return 0
+    // Double angles, which are a word list right after an infix, and
+    // otherwise a hyper prefix.
+    let double = ch == Ch.GuillemetOpen || ch == Ch.Less && input.peek(pos + 1) == Ch.Less
+    if (double) {
+      if (!termPosition && (pos == 1 || before == Ch.Equals)) return pos
+      if (ch == Ch.Less) pos++
+    } else if (ch == Ch.Slash) {
+      if (before != Ch.Slash) return pos
+    } else if (ch == Ch.Less) {
+      let after = input.peek(pos + 1)
+      let infix = pos == 1 && (first == Ch.Plus || first == Ch.Tilde || first == Ch.Bang) &&
+        (!termPosition || after == Ch.Equals || isSpace(after))
+      let afterTerm = (pos == 1 && first == Ch.Star || pos == 2 && (first == Ch.Plus || first == Ch.Hyphen) && before == first) &&
+        !isIdentifierStart(after)
+      if (!infix && !afterTerm) return pos
+    }
+  }
+}
+
+function operatorHead(input: InputStream, mode: Mode) {
+  let end = operatorHeadEnd(input, inTermPosition(input, mode, 1))
+  if (end > 0) input.acceptToken(wordOperator, end)
+}
+
 // The tokens that depend on whether a term or an operator is expected.
 export const termToken = new ExternalTokenizer((input, stack) => {
   if (!stack.canShift(regexLiteral)) {
@@ -1372,10 +1446,10 @@ export const termToken = new ExternalTokenizer((input, stack) => {
       hasBalancedBraces(input, opening.start, end)
     return input.acceptToken(interpolates ? interpolatingWordList : rawString, end)
   } else if (next == Ch.Slash) {
-    if (input.peek(1) == Ch.Slash || !inTermPosition(input, mode, 1)) return
-    let end = regexTokenEnd(input, slashOpening)
-    if (end > 0) input.acceptToken(regexLiteral, end)
-    return
+    let end = input.peek(1) != Ch.Slash && inTermPosition(input, mode, 1) ? regexTokenEnd(input, slashOpening) : -1
+    return end > 0 ? input.acceptToken(regexLiteral, end) : operatorHead(input, mode)
+  } else if (isOperatorRunChar(next)) {
+    return operatorHead(input, mode)
   }
 
   let opening = readOpening(input)
